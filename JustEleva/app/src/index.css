@@ -1,0 +1,16 @@
+@import "tailwindcss";
+
+/* Tokens de marca — JUST Construtora (azul-marinho #0e2148) */
+@theme {
+  --color-brand-50: #f1f5fb;
+  --color-brand-100: #dde7f3;
+  --color-brand-200: #c0d2e8;
+  --color-brand-300: #95b1d4;
+  --color-brand-400: #6388bb;
+  --color-brand-500: #426aa1;
+  --color-brand-600: #325286;
+  --color-brand-700: #2a426c;
+  --color-brand-800: #1c2e4f;
+  --color-brand-900: #0e2148;
+  --color-brand-950: #081530;
+}

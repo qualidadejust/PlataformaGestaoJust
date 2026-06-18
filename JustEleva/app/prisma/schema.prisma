@@ -1,0 +1,491 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Employee {
+  id             String    @id @default(uuid())
+  name           String
+  role           String
+  department     String
+  email          String?
+  phone          String?
+  admission_date String?
+  avatar_url     String?
+  is_manager     Boolean   @default(false)
+  cost_center    String?
+  template_id    String?
+  created_at     DateTime  @default(now())
+  updated_at     DateTime  @updatedAt
+
+  evaluations_as_employee  Evaluation[] @relation("EmployeeEvaluations")
+  evaluations_as_evaluator Evaluation[] @relation("EvaluatorEvaluations")
+  pdi_plans                PdiPlan[]
+  feedbacks_sent           Feedback[]   @relation("FeedbackFrom")
+  feedbacks_received       Feedback[]   @relation("FeedbackTo")
+  calibrations             Calibration[]
+  alocacoes                Alocacao[]
+  access_tokens            AccessToken[]
+  movimentacoes            Movimentacao[]
+  indicador_atribuicoes    IndicadorAtribuicao[]
+  indicador_realizacoes    IndicadorRealizacao[]
+  template                 EvaluationTemplate? @relation(fields: [template_id], references: [id], onDelete: SetNull)
+
+  @@map("employees")
+}
+
+// ---------- Obras e Alocação (colaborador × obra × período) ----------
+
+model Obra {
+  id          String   @id @default(uuid())
+  nome        String
+  cost_center String?  @unique // chave de ligação com a folha / centro de custo
+  tipo        String   @default("obra")  // 'obra' | 'sede'
+  status      String   @default("ativa") // 'ativa' | 'encerrada'
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  alocacoes   Alocacao[]
+  evaluations Evaluation[]
+
+  @@map("obras")
+}
+
+model Alocacao {
+  id            String   @id @default(uuid())
+  employee_id   String
+  obra_id       String
+  papel_na_obra String   @default("mao_de_obra") // 'residente' | 'mestre' | 'mao_de_obra' | 'administrativo'
+  principal     Boolean  @default(false)
+  responsavel   Boolean  @default(false) // responsável por avaliar o nível abaixo nesta obra
+  data_inicio   String?
+  data_fim      String?
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  employee Employee @relation(fields: [employee_id], references: [id], onDelete: Cascade)
+  obra     Obra     @relation(fields: [obra_id], references: [id], onDelete: Cascade)
+
+  @@index([employee_id])
+  @@index([obra_id])
+  @@map("alocacoes")
+}
+
+model EvaluationTemplate {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  scale_max   Int      @default(5)
+  applies_to  String   @default("default")
+  is_active   Boolean  @default(true)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  blocks    EvaluationBlock[]
+  employees Employee[]
+
+  @@map("evaluation_templates")
+}
+
+model EvaluationBlock {
+  id           String  @id @default(uuid())
+  template_id  String
+  title        String
+  sort_order   Int     @default(0)
+  manager_only Boolean @default(false)
+
+  template  EvaluationTemplate @relation(fields: [template_id], references: [id], onDelete: Cascade)
+  questions TemplateQuestion[]
+
+  @@map("evaluation_blocks")
+}
+
+model TemplateQuestion {
+  id          String @id @default(uuid())
+  block_id    String
+  text        String
+  answer_type String @default("scale")
+  sort_order  Int    @default(0)
+
+  block EvaluationBlock @relation(fields: [block_id], references: [id], onDelete: Cascade)
+
+  @@map("template_questions")
+}
+
+model Cycle {
+  id         String   @id @default(uuid())
+  name       String
+  start_date String
+  end_date   String
+  status     String   @default("active")
+  tipo       String   @default("periodica") // 'periodica' | 'movimentacao'
+  created_at DateTime @default(now())
+
+  evaluations   Evaluation[]
+  pdi_plans     PdiPlan[]
+  calibrations  Calibration[]
+  access_tokens AccessToken[]
+
+  @@map("cycles")
+}
+
+// Link mágico (sem senha) que dá ao avaliador acesso à sua fila de avaliações do ciclo
+model AccessToken {
+  id              String    @id @default(uuid())
+  token           String    @unique
+  employee_id     String
+  cycle_id        String?
+  movimentacao_id String?
+  expires_at      DateTime?
+  created_at      DateTime  @default(now())
+
+  employee     Employee      @relation(fields: [employee_id], references: [id], onDelete: Cascade)
+  cycle        Cycle?        @relation(fields: [cycle_id], references: [id], onDelete: Cascade)
+  movimentacao Movimentacao? @relation(fields: [movimentacao_id], references: [id], onDelete: Cascade)
+
+  @@unique([employee_id, cycle_id])
+  @@map("access_tokens")
+}
+
+// Indicadores de desempenho (catálogo + atribuição por pessoa). PILOTO: ainda NÃO compõe a nota da avaliação.
+model Indicador {
+  id            String   @id @default(uuid())
+  nome          String
+  descricao     String?
+  unidade       String?  // ex.: '%', 'dias', 'ocorrências'
+  direcao       String   @default("maior") // 'maior' = quanto maior melhor | 'menor' = quanto menor melhor
+  cargo_alvo    String?  // cargo a que se aplica (texto livre); null = geral
+  setor         String?  // setor/processo dono do KPI (Qualidade, RH, Obra, ...)
+  formula       String?  // como medir (a métrica "M" do SMART)
+  meta          String?  // meta padrão do indicador (a "A" do SMART), ex.: '≥ 95%'
+  periodicidade String?  // frequência de medição (a "T"), ex.: 'mensal', 'trimestral'
+  responsavel   String?  // responsável pelo KPI (pessoa ou setor)
+  acumula       Boolean  @default(false) // true = contagem com teto anual (acumula no ano); false = taxa/percentual (compara por período)
+  ativo         Boolean  @default(true)
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  atribuicoes IndicadorAtribuicao[]
+  realizacoes IndicadorRealizacao[]
+
+  @@map("indicadores")
+}
+
+// Lançamento do valor REALIZADO de um indicador num período. PILOTO: registro/observação, ainda não compõe a nota.
+model IndicadorRealizacao {
+  id            String   @id @default(uuid())
+  indicador_id  String
+  employee_id   String?  // null = valor do indicador/setor como um todo; preenchido = realizado de uma pessoa
+  periodo       String   // alinhado à periodicidade: 'YYYY-MM' (mensal) | 'YYYY-Tn' (trimestral) | 'YYYY'
+  valor         String?  // valor textual, p/ acomodar unidades ('4.2%', '12 dias')
+  valor_num     Float?   // valor numérico p/ gráficos e comparação com a meta
+  observacao    String?
+  evidencia_url String?
+  lancado_por   String?  // quem informou o dado (nome/responsável)
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  indicador Indicador @relation(fields: [indicador_id], references: [id], onDelete: Cascade)
+  employee  Employee? @relation(fields: [employee_id], references: [id], onDelete: SetNull)
+
+  @@unique([indicador_id, employee_id, periodo])
+  @@index([indicador_id])
+  @@map("indicador_realizacoes")
+}
+
+model IndicadorAtribuicao {
+  id           String   @id @default(uuid())
+  indicador_id String
+  employee_id  String
+  meta         String?  // meta do período (texto livre p/ acomodar unidades: '95%', '<= 2%', '30 dias')
+  peso         Int      @default(1)
+  fonte        String   @default("avaliador") // 'avaliador' | 'rh'
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  indicador Indicador @relation(fields: [indicador_id], references: [id], onDelete: Cascade)
+  employee  Employee  @relation(fields: [employee_id], references: [id], onDelete: Cascade)
+
+  @@unique([indicador_id, employee_id])
+  @@index([employee_id])
+  @@map("indicador_atribuicoes")
+}
+
+// Avaliação de movimentação (aumento/promoção) — processo separado do ciclo, banca multi-fonte aprovada pelo RH
+model Movimentacao {
+  id               String    @id @default(uuid())
+  employee_id      String
+  tipo             String    @default("promocao") // 'aumento' | 'promocao'
+  cargo_atual      String?
+  cargo_pretendido String?
+  motivo           String?
+  status           String    @default("solicitada") // solicitada | em_coleta | concluida | arquivada
+  decisao          String?   // aprovada | reprovada
+  justificativa    String?
+  decided_at       DateTime?
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
+
+  employee      Employee      @relation(fields: [employee_id], references: [id], onDelete: Cascade)
+  evaluations   Evaluation[]
+  access_tokens AccessToken[]
+
+  @@map("movimentacoes")
+}
+
+model Evaluation {
+  id            String    @id @default(uuid())
+  employee_id     String
+  evaluator_id    String?
+  cycle_id        String?
+  obra_id         String?
+  movimentacao_id String?
+  type            String
+  origem          String    @default("manual") // 'manual' | 'auto'
+  status        String    @default("pending")
+  due_date      String?
+  submitted_at  DateTime?
+  strengths     String?
+  opportunities String?
+  feedback_date String?
+  created_at    DateTime  @default(now())
+  updated_at    DateTime  @updatedAt
+
+  employee  Employee  @relation("EmployeeEvaluations", fields: [employee_id], references: [id], onDelete: Cascade)
+  evaluator Employee? @relation("EvaluatorEvaluations", fields: [evaluator_id], references: [id], onDelete: SetNull)
+  cycle     Cycle?    @relation(fields: [cycle_id], references: [id], onDelete: SetNull)
+  obra      Obra?     @relation(fields: [obra_id], references: [id], onDelete: SetNull)
+  movimentacao Movimentacao? @relation(fields: [movimentacao_id], references: [id], onDelete: Cascade)
+
+  scores           EvaluationScore[]
+  potential_scores PotentialScore[]
+  feedbacks        Feedback[]
+
+  @@map("evaluations")
+}
+
+model EvaluationScore {
+  id            String   @id @default(uuid())
+  evaluation_id String
+  question_id   String
+  score         String?
+  updated_at    DateTime @updatedAt
+
+  evaluation Evaluation @relation(fields: [evaluation_id], references: [id], onDelete: Cascade)
+
+  @@unique([evaluation_id, question_id])
+  @@map("evaluation_scores")
+}
+
+model PotentialScore {
+  id            String @id @default(uuid())
+  evaluation_id String
+  question_id   String
+  score         Int?
+
+  evaluation Evaluation @relation(fields: [evaluation_id], references: [id], onDelete: Cascade)
+
+  @@unique([evaluation_id, question_id])
+  @@map("potential_scores")
+}
+
+model PdiPlan {
+  id          String   @id @default(uuid())
+  employee_id String
+  cycle_id    String?
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  employee Employee  @relation(fields: [employee_id], references: [id], onDelete: Cascade)
+  cycle    Cycle?    @relation(fields: [cycle_id], references: [id], onDelete: SetNull)
+  actions  PdiAction[]
+
+  @@map("pdi_plans")
+}
+
+model PdiAction {
+  id                 String   @id @default(uuid())
+  pdi_plan_id        String
+  title              String
+  description        String
+  status             String   @default("pending")
+  deadline           String
+  resources_needed   String?
+  expected_outcomes  String?
+  related_competency String?
+  action_type        String?
+  created_at         DateTime @default(now())
+  updated_at         DateTime @updatedAt
+
+  pdi_plan PdiPlan @relation(fields: [pdi_plan_id], references: [id], onDelete: Cascade)
+
+  @@map("pdi_actions")
+}
+
+model Feedback {
+  id               String   @id @default(uuid())
+  from_employee_id String
+  to_employee_id   String
+  evaluation_id    String?
+  content          String
+  type             String   @default("recognition")
+  created_at       DateTime @default(now())
+
+  from_employee Employee   @relation("FeedbackFrom", fields: [from_employee_id], references: [id], onDelete: Cascade)
+  to_employee   Employee   @relation("FeedbackTo", fields: [to_employee_id], references: [id], onDelete: Cascade)
+  evaluation    Evaluation? @relation(fields: [evaluation_id], references: [id], onDelete: SetNull)
+
+  @@map("feedbacks")
+}
+
+model Calibration {
+  id            String   @id @default(uuid())
+  employee_id   String
+  cycle_id      String
+  score         Float?
+  potential     String?
+  justification String?
+  status        String   @default("draft")
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  employee Employee @relation(fields: [employee_id], references: [id], onDelete: Cascade)
+  cycle    Cycle    @relation(fields: [cycle_id], references: [id], onDelete: Cascade)
+
+  @@unique([employee_id, cycle_id])
+  @@map("calibrations")
+}
+
+// ---------- Pesquisa de Satisfação / Clima Interno (anônima e agregada) ----------
+
+model SurveyForm {
+  id         String   @id @default(uuid())
+  name       String
+  is_active  Boolean  @default(true)
+  created_at DateTime @default(now())
+
+  dimensions SurveyDimension[]
+  campaigns  SurveyCampaign[]
+
+  @@map("survey_forms")
+}
+
+model SurveyDimension {
+  id         String @id @default(uuid())
+  form_id    String
+  title      String
+  sort_order Int    @default(0)
+
+  form      SurveyForm       @relation(fields: [form_id], references: [id], onDelete: Cascade)
+  questions SurveyQuestion[]
+
+  @@map("survey_dimensions")
+}
+
+model SurveyQuestion {
+  id           String  @id @default(uuid())
+  dimension_id String
+  text         String
+  kind         String  @default("scale") // 'scale' (1-5) | 'enps' (0-10)
+  allow_na     Boolean @default(true)
+  sort_order   Int     @default(0)
+
+  dimension SurveyDimension @relation(fields: [dimension_id], references: [id], onDelete: Cascade)
+
+  @@map("survey_questions")
+}
+
+model SurveyCampaign {
+  id         String   @id @default(uuid())
+  name       String
+  revision   String?
+  form_id    String
+  start_date String?
+  end_date   String?
+  status     String   @default("draft") // 'draft' | 'open' | 'closed'
+  min_n      Int      @default(5)
+  created_at DateTime @default(now())
+
+  form             SurveyForm              @relation(fields: [form_id], references: [id], onDelete: Restrict)
+  responses        SurveyResponse[]
+  imported_results SurveyImportedResult[]
+  comments         SurveyComment[]
+  actions          SurveyAction[]
+
+  @@map("survey_campaigns")
+}
+
+model SurveyResponse {
+  id           String   @id @default(uuid())
+  campaign_id  String
+  cost_center  String?
+  source       String   @default("digital") // 'digital' | 'imported'
+  submitted_at DateTime @default(now())
+
+  campaign SurveyCampaign  @relation(fields: [campaign_id], references: [id], onDelete: Cascade)
+  answers  SurveyAnswer[]
+
+  @@map("survey_responses")
+}
+
+model SurveyAnswer {
+  id          String @id @default(uuid())
+  response_id String
+  question_id String
+  score       Int?
+
+  response SurveyResponse @relation(fields: [response_id], references: [id], onDelete: Cascade)
+
+  @@map("survey_answers")
+}
+
+model SurveyImportedResult {
+  id          String  @id @default(uuid())
+  campaign_id String
+  question_id String
+  cost_center String
+  n           Int     @default(0)
+  c5          Int     @default(0)
+  c4          Int     @default(0)
+  c3          Int     @default(0)
+  c2          Int     @default(0)
+  c1          Int     @default(0)
+  media       Float?
+
+  campaign SurveyCampaign @relation(fields: [campaign_id], references: [id], onDelete: Cascade)
+
+  @@map("survey_imported_results")
+}
+
+model SurveyComment {
+  id          String   @id @default(uuid())
+  campaign_id String
+  cost_center String?
+  text        String
+  created_at  DateTime @default(now())
+
+  campaign SurveyCampaign @relation(fields: [campaign_id], references: [id], onDelete: Cascade)
+
+  @@map("survey_comments")
+}
+
+model SurveyAction {
+  id              String   @id @default(uuid())
+  campaign_id     String
+  dimension_title String
+  cost_center     String?
+  title           String
+  description     String?
+  owner           String?
+  status          String   @default("pending") // 'pending' | 'in_progress' | 'completed'
+  deadline        String?
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  campaign SurveyCampaign @relation(fields: [campaign_id], references: [id], onDelete: Cascade)
+
+  @@map("survey_actions")
+}

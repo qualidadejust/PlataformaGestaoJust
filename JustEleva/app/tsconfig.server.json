@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "moduleResolution": "node16",
+    "module": "node16",
+    "target": "ES2022",
+    "allowImportingTsExtensions": false,
+    "noEmit": true,
+    "paths": {}
+  },
+  "include": ["server/**/*"]
+}

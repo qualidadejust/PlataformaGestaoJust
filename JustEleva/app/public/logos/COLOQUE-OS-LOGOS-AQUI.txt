@@ -1,0 +1,27 @@
+==========================================================
+  PASTA DOS LOGOS DA JUST CONSTRUTORA
+==========================================================
+
+Coloque os 2 arquivos PNG aqui, com EXATAMENTE estes nomes:
+
+  logo-just.png         -> logo MARINHO (#0e2148)
+                           usado em: favicon, fundos claros, login, relatórios
+
+  logo-just-white.png   -> logo BRANCO
+                           usado em: menu lateral (Sidebar) / fundos escuros
+
+----------------------------------------------------------
+DICAS
+----------------------------------------------------------
+- Use PNG com FUNDO TRANSPARENTE.
+- Pode recortar o espaço em branco em volta do logo (trim) para
+  ele não ficar pequeno dentro da área.
+- Proporção horizontal funciona melhor (a Sidebar usa altura ~36px).
+- Depois de salvar os arquivos, é só recarregar a página (Ctrl+F5).
+  O app troca o texto pelo logo automaticamente.
+
+Enquanto os arquivos não existirem, o app mostra a wordmark de
+texto "JUST CONSTRUTORA" como fallback (não quebra nada).
+
+Quer usar SVG em vez de PNG? Salve com nome .svg e troque a
+extensão em: src/components/Logo.tsx (linha do `src`).

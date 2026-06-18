@@ -1,0 +1,34 @@
+# Dependências
+node_modules/
+
+# Builds
+dist/
+build/
+
+# Cache do Vite
+.vite/
+
+# Bancos SQLite (recriados via `prisma migrate` + `db:seed`)
+*.db
+*.db-shm
+*.db-wal
+*.db-journal
+
+# Pastas de dados e planilhas com DADOS PESSOAIS (LGPD): CPF, RG, PIS, endereços
+data/
+*.csv
+
+# Variáveis de ambiente
+.env
+.env.local
+
+# Configurações locais/pessoais do Claude Code
+**/.claude/settings.local.json
+
+# Logs e temporários
+*.log
+npm-debug.log*
+
+# Sistema operacional
+.DS_Store
+Thumbs.db

@@ -1,0 +1,196 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+/// ----------------------------------------------------------------------------
+/// JustCore — dados-mestre compartilhados da Plataforma de Gestão (Construtora JUST)
+/// Fonte única consumida pelos apps (JustEleva, JustSecurity, ...).
+/// IDs em UUID (string) e tabelas snake_case para alinhar com o JustEleva.
+/// ----------------------------------------------------------------------------
+
+model Empresa {
+  id                 String   @id @default(uuid())
+  razao_social       String
+  nome_fantasia      String?
+  cnpj               String?  @unique
+  inscricao_estadual String?
+  endereco           String?
+  cidade             String?
+  uf                 String?
+  telefone           String?
+  email              String?
+  ativo              Boolean  @default(true)
+  created_at         DateTime @default(now())
+  updated_at         DateTime @updatedAt
+
+  obras         Obra[]
+  colaboradores Colaborador[]
+
+  @@map("empresas")
+}
+
+model Cargo {
+  id         String   @id @default(uuid())
+  nome       String   @unique
+  descricao  String?
+  nivel      String? // operacional | tecnico | administrativo | lideranca | diretoria
+  ativo      Boolean  @default(true)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  colaboradores Colaborador[]
+
+  @@map("cargos")
+}
+
+model Obra {
+  id          String   @id @default(uuid())
+  nome        String
+  cost_center String?  @unique // centro de custo / chave de ligação com a folha
+  tipo        String   @default("obra") // obra | sede
+  status      String   @default("ativa") // ativa | encerrada
+  empresa_id  String?
+  endereco    String?
+  cidade      String?
+  uf          String?
+  data_inicio String?
+  data_fim    String?
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  empresa   Empresa?   @relation(fields: [empresa_id], references: [id], onDelete: SetNull)
+  alocacoes Alocacao[]
+
+  @@map("obras")
+}
+
+model Colaborador {
+  id              String   @id @default(uuid())
+  nome            String
+  matricula       String?  @unique
+  cpf             String?  @unique
+  rg              String?
+  data_nascimento String?
+  data_admissao   String?
+  data_demissao   String?
+  email           String?
+  telefone        String?
+  cargo_id        String?
+  empresa_id      String?
+  setor           String?
+  is_lideranca    Boolean  @default(false)
+  status          String   @default("ativo") // ativo | afastado | desligado
+  avatar_url      String?
+  // dados pessoais (origem: folha de pagamento)
+  pis             String?
+  sexo            String? // M | F
+  estado_civil    String?
+  endereco        String?
+  numero          String?
+  cep             String?
+  rg_emissor      String?
+  rg_uf           String?
+  situacao        String? // situação na folha (Trabalhando, Auxílio Doença, ...)
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  cargo     Cargo?     @relation(fields: [cargo_id], references: [id], onDelete: SetNull)
+  empresa   Empresa?   @relation(fields: [empresa_id], references: [id], onDelete: SetNull)
+  alocacoes Alocacao[]
+
+  @@index([cargo_id])
+  @@index([empresa_id])
+  @@map("colaboradores")
+}
+
+model Alocacao {
+  id             String   @id @default(uuid())
+  colaborador_id String
+  obra_id        String
+  papel_na_obra  String   @default("mao_de_obra") // residente | mestre | mao_de_obra | administrativo
+  principal      Boolean  @default(false)
+  responsavel    Boolean  @default(false)
+  data_inicio    String?
+  data_fim       String?
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  colaborador Colaborador @relation(fields: [colaborador_id], references: [id], onDelete: Cascade)
+  obra        Obra        @relation(fields: [obra_id], references: [id], onDelete: Cascade)
+
+  @@index([colaborador_id])
+  @@index([obra_id])
+  @@map("alocacoes")
+}
+
+model Fornecedor {
+  id         String   @id @default(uuid())
+  nome       String
+  cnpj       String?  @unique
+  contato    String?
+  telefone   String?
+  email      String?
+  ativo      Boolean  @default(true)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  insumos Insumo[]
+
+  @@map("fornecedores")
+}
+
+model Setor {
+  id         String   @id @default(uuid())
+  nome       String   @unique
+  descricao  String?
+  ativo      Boolean  @default(true)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@map("setores")
+}
+
+/// Catálogo de indicadores SMART (referência). Transferido do JustEleva.
+/// As atribuições por pessoa e os valores realizados permanecem no app de avaliação.
+model Indicador {
+  id            String   @id @default(uuid())
+  nome          String
+  descricao     String?
+  setor         String? // setor/processo dono do KPI (texto, como no JustEleva)
+  unidade       String?
+  direcao       String   @default("maior") // 'maior' melhor | 'menor' melhor
+  meta          String? // meta padrão (texto p/ acomodar unidades)
+  periodicidade String?
+  formula       String?
+  responsavel   String?
+  cargo_alvo    String?
+  acumula       Boolean  @default(false)
+  ativo         Boolean  @default(true)
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  @@map("indicadores")
+}
+
+model Insumo {
+  id            String   @id @default(uuid())
+  nome          String
+  categoria     String   @default("material") // epi | material | ferramenta | equipamento | consumivel
+  unidade       String   @default("un") // un | par | m | m2 | kg | L | cx
+  ca            String? // Certificado de Aprovação (obrigatório p/ EPI)
+  validade_dias Int? // vida útil estimada (informativo)
+  descricao     String?
+  fornecedor_id String?
+  ativo         Boolean  @default(true)
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  fornecedor Fornecedor? @relation(fields: [fornecedor_id], references: [id], onDelete: SetNull)
+
+  @@index([categoria])
+  @@map("insumos")
+}
