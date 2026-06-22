@@ -1,79 +1,16 @@
 import { useEffect, useState } from "react";
-import { Search, UserPlus, Building2, Calendar, ChevronRight, X } from "lucide-react";
-import { useEmployees, useCreateEmployee } from '../hooks/useEmployees';
+import { Search, Building2, Calendar, ChevronRight, Database } from "lucide-react";
+import { useEmployees } from '../hooks/useEmployees';
 
-function NovoColaboradorModal({ onClose }: { onClose: () => void }) {
-  const create = useCreateEmployee();
-  const [form, setForm] = useState({
-    name: '', role: '', department: '', email: '', phone: '',
-    admission_date: '', is_manager: false,
-  });
-  const [error, setError] = useState('');
-
-  const set = (field: string, value: string | boolean) =>
-    setForm(f => ({ ...f, [field]: value }));
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!form.name.trim() || !form.role.trim() || !form.department.trim()) {
-      setError('Nome, cargo e departamento são obrigatórios.');
-      return;
-    }
-    try {
-      await create.mutateAsync({ ...form, is_manager: form.is_manager ? 1 : 0 } as any);
-      onClose();
-    } catch {
-      setError('Erro ao criar colaborador. Tente novamente.');
-    }
-  }
-
+// Aviso: o cadastro de colaboradores é feito no JustCore (fonte única).
+function AvisoCore() {
   return (
-    <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg animate-in zoom-in-95 duration-200">
-        <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100">
-          <h2 className="text-lg font-bold text-slate-900">Novo Colaborador</h2>
-          <button onClick={onClose} className="p-2 text-slate-400 hover:bg-slate-100 rounded-lg transition-colors"><X className="w-5 h-5" /></button>
-        </div>
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          {error && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-2">{error}</p>}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="col-span-2">
-              <label className="block text-xs font-bold text-slate-700 mb-1">Nome completo *</label>
-              <input value={form.name} onChange={e => set('name', e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500" placeholder="Ex: João Silva" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Cargo *</label>
-              <input value={form.role} onChange={e => set('role', e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500" placeholder="Ex: Engenheiro Civil" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Departamento *</label>
-              <input value={form.department} onChange={e => set('department', e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500" placeholder="Ex: Engenharia" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">E-mail</label>
-              <input type="email" value={form.email} onChange={e => set('email', e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500" placeholder="joao@just.com.br" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Telefone</label>
-              <input value={form.phone} onChange={e => set('phone', e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500" placeholder="(11) 9xxxx-xxxx" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Data de admissão</label>
-              <input type="date" value={form.admission_date} onChange={e => set('admission_date', e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500" />
-            </div>
-            <div className="flex items-center gap-3 pt-4">
-              <input type="checkbox" id="is_manager" checked={form.is_manager} onChange={e => set('is_manager', e.target.checked)} className="w-4 h-4 text-brand-600 border-slate-300 rounded focus:ring-brand-500" />
-              <label htmlFor="is_manager" className="text-sm font-medium text-slate-700 cursor-pointer">É gestor/liderança</label>
-            </div>
-          </div>
-          <div className="flex gap-3 pt-2">
-            <button type="button" onClick={onClose} className="flex-1 py-2.5 border border-slate-200 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">Cancelar</button>
-            <button type="submit" disabled={create.isPending} className="flex-1 py-2.5 bg-brand-900 hover:bg-brand-800 text-white rounded-lg text-sm font-bold transition-colors disabled:opacity-60">
-              {create.isPending ? 'Salvando...' : 'Criar Colaborador'}
-            </button>
-          </div>
-        </form>
-      </div>
+    <div className="flex items-start gap-2 text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5">
+      <Database className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
+      <span>
+        Colaboradores são cadastrados no <strong>JustCore</strong> (porta 4101). Esta tela é somente
+        leitura — reflete os dados sincronizados.
+      </span>
     </div>
   );
 }
@@ -84,7 +21,6 @@ export function TeamView({ onNavigate }: { onNavigate?: (view: string, id?: stri
   const { data: team = [], isLoading } = useEmployees();
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
-  const [showModal, setShowModal] = useState(false);
 
   const departments = [...new Set(team.map(m => m.department))].sort();
   const filtered = team.filter(m => {
@@ -97,21 +33,12 @@ export function TeamView({ onNavigate }: { onNavigate?: (view: string, id?: stri
 
   return (
     <div className="p-8 max-w-7xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500 pb-24">
-      {showModal && <NovoColaboradorModal onClose={() => setShowModal(false)} />}
-
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-900 tracking-tight">Minha Equipe</h1>
-          <p className="text-sm text-slate-500 mt-1">Gerencie os colaboradores sob sua responsabilidade.</p>
-        </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-brand-900 text-white rounded-lg text-sm font-medium hover:bg-brand-800 transition-colors"
-        >
-          <UserPlus className="w-4 h-4" />
-          Novo Colaborador
-        </button>
+      <div className="mb-4">
+        <h1 className="text-2xl font-semibold text-slate-900 tracking-tight">Minha Equipe</h1>
+        <p className="text-sm text-slate-500 mt-1">Colaboradores sob sua responsabilidade (somente leitura).</p>
       </div>
+
+      <div className="mb-6"><AvisoCore /></div>
 
       <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
         <div className="p-4 border-b border-slate-200 flex items-center gap-4 bg-slate-50">

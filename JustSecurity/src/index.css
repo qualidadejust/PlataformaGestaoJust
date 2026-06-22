@@ -27,16 +27,19 @@ body {
   color: #0f172a;
 }
 
-/* Impressão / PDF do Termo: mostra apenas o documento. */
+/* Impressão / PDF: mostra apenas a área marcada (termo ou relatório). */
 @media print {
   body * {
     visibility: hidden;
   }
   .termo-print,
-  .termo-print * {
+  .termo-print *,
+  .print-area,
+  .print-area * {
     visibility: visible;
   }
-  .termo-print {
+  .termo-print,
+  .print-area {
     position: absolute;
     left: 0;
     top: 0;

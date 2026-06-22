@@ -1,8 +1,14 @@
 import { useState } from "react";
-import { HardHat, Send, CheckCircle2 } from "lucide-react";
-import { useColaboradores, useEpis, useCreateEntrega } from "../hooks/useEpi";
+import { HardHat, Send, CheckCircle2, RefreshCw, ShieldAlert, Fingerprint } from "lucide-react";
+import { useColaboradores, useEpis, useCreateEntrega, TIPO_CONTROLE_LABEL, biometriaSelo, type MotivoEntrega } from "../hooks/useEpi";
 import { FingerprintCapture } from "../components/FingerprintCapture";
 import type { CaptureResult } from "../lib/fingerprint";
+
+const MOTIVOS: { value: MotivoEntrega; label: string; hint: string }[] = [
+  { value: "inicial", label: "Entrega inicial", hint: "Primeira entrega deste EPI ao colaborador." },
+  { value: "complementar", label: "Entrega complementar", hint: "EPI adicional, sem substituir um anterior." },
+  { value: "troca", label: "Troca", hint: "Substitui o EPI atual — a ficha anterior é baixada automaticamente." },
+];
 
 export function EntregaEpiView() {
   const { data: colaboradores = [] } = useColaboradores();
@@ -11,16 +17,19 @@ export function EntregaEpiView() {
 
   const [colaboradorId, setColaboradorId] = useState("");
   const [epiId, setEpiId] = useState("");
+  const [motivo, setMotivo] = useState<MotivoEntrega>("inicial");
   const [quantidade, setQuantidade] = useState(1);
   const [observacao, setObservacao] = useState("");
   const [assinatura, setAssinatura] = useState<CaptureResult | null>(null);
   const [ok, setOk] = useState(false);
 
+  const epiSel = epis.find((e) => e.id === epiId);
   const podeSalvar = colaboradorId && epiId && assinatura && !criar.isPending;
 
   function limpar() {
     setColaboradorId("");
     setEpiId("");
+    setMotivo("inicial");
     setQuantidade(1);
     setObservacao("");
     setAssinatura(null);
@@ -42,6 +51,10 @@ export function EntregaEpiView() {
       epi_nome: epi.nome,
       epi_ca: epi.ca,
       quantidade,
+      motivo,
+      tipo_controle: epi.tipo_controle,
+      validade_dias: epi.validade_dias,
+      alerta_dias: epi.alerta_dias,
       assinatura_img: assinatura.dataUrl,
       assinatura_tipo: assinatura.tipo,
       observacao: observacao || undefined,
@@ -64,8 +77,29 @@ export function EntregaEpiView() {
       </div>
 
       {ok && (
-        <div className="mb-5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 flex items-center gap-2 text-sm">
-          <CheckCircle2 className="w-5 h-5" /> Entrega registrada e assinada com sucesso.
+        <div className="mb-5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 text-sm space-y-1">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-5 h-5" /> Entrega registrada e assinada com sucesso.
+          </div>
+          {criar.data && (() => {
+            const selo = biometriaSelo(criar.data);
+            return (
+              <div className="flex items-center gap-1.5 pl-7 text-xs">
+                <Fingerprint className="w-3.5 h-3.5" />
+                {selo.estado === "confirmada" ? (
+                  <span className="text-emerald-700 font-medium">
+                    Identidade confirmada por biometria (score {selo.score?.toFixed(0)})
+                  </span>
+                ) : selo.estado === "nao_cadastrado" ? (
+                  <span className="text-amber-700">
+                    Colaborador sem cadastro biométrico — assinatura não conferida na base.
+                  </span>
+                ) : (
+                  <span className="text-amber-700">Verificação biométrica indisponível neste registro.</span>
+                )}
+              </div>
+            );
+          })()}
         </div>
       )}
 
@@ -101,6 +135,30 @@ export function EntregaEpiView() {
                 </option>
               ))}
             </select>
+            {epiSel && (
+              <span className="mt-1 inline-flex items-center gap-1.5 text-xs text-slate-500">
+                <ShieldAlert className="w-3.5 h-3.5 text-slate-400" />
+                {TIPO_CONTROLE_LABEL[epiSel.tipo_controle] ?? epiSel.tipo_controle}
+                {epiSel.validade_dias ? ` · ${epiSel.validade_dias} dias` : ""}
+              </span>
+            )}
+          </label>
+
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700">Motivo</span>
+            <select
+              value={motivo}
+              onChange={(e) => setMotivo(e.target.value as MotivoEntrega)}
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+            >
+              {MOTIVOS.map((m) => (
+                <option key={m.value} value={m.value}>{m.label}</option>
+              ))}
+            </select>
+            <span className="mt-1 flex items-start gap-1.5 text-xs text-slate-500">
+              {motivo === "troca" && <RefreshCw className="w-3.5 h-3.5 text-amber-500 mt-0.5 shrink-0" />}
+              {MOTIVOS.find((m) => m.value === motivo)?.hint}
+            </span>
           </label>
 
           <label className="block">

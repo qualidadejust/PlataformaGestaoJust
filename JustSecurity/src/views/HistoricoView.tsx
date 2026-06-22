@@ -1,12 +1,34 @@
 import { useState } from "react";
 import { History, Fingerprint, FileText, Printer, X, ShieldCheck, ShieldAlert, Loader2 } from "lucide-react";
-import { useEntregas, useVerificacao, type Entrega } from "../hooks/useEpi";
+import { useEntregas, useVerificacao, useEmpresas, biometriaSelo, type Entrega } from "../hooks/useEpi";
 import { TermoEntrega } from "../components/TermoEntrega";
+
+function SeloBiometria({ e }: { e: Entrega }) {
+  const s = biometriaSelo(e);
+  if (s.estado === "confirmada")
+    return (
+      <span className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700" title={`Identidade confirmada por biometria (score ${s.score?.toFixed(0)})`}>
+        <Fingerprint className="w-3 h-3" /> conferida {s.score != null ? `· ${s.score.toFixed(0)}` : ""}
+      </span>
+    );
+  if (s.estado === "nao_cadastrado")
+    return <span className="text-[11px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500" title="Colaborador sem cadastro biométrico">sem cadastro</span>;
+  return <span className="text-[11px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-400" title="Sem verificação biométrica neste registro">—</span>;
+}
+
+// Normaliza razão social para casar o nome da empresa (snapshot) com o cadastro do Core.
+const normEmpresa = (s?: string | null) =>
+  (s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/\s+/g, " ").trim();
 
 export function HistoricoView() {
   const { data: entregas = [], isLoading } = useEntregas();
   const { data: verif, isFetching, refetch } = useVerificacao();
+  const { data: empresas = [] } = useEmpresas();
   const [termo, setTermo] = useState<Entrega | null>(null);
+
+  // CNPJ da obra/empresa do termo aberto (casa o snapshot da entrega com o Core).
+  const cnpjPorEmpresa = new Map(empresas.map((emp) => [normEmpresa(emp.razao_social), emp.cnpj]));
+  const termoCnpj = termo ? cnpjPorEmpresa.get(normEmpresa(termo.empresa_nome)) ?? null : null;
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -62,6 +84,7 @@ export function HistoricoView() {
                 <th className="px-4 py-3 font-medium">Qtd</th>
                 <th className="px-4 py-3 font-medium">Data</th>
                 <th className="px-4 py-3 font-medium">Assinatura</th>
+                <th className="px-4 py-3 font-medium">Biometria</th>
                 <th className="px-4 py-3 font-medium text-right">Termo</th>
               </tr>
             </thead>
@@ -108,6 +131,7 @@ export function HistoricoView() {
                         <Fingerprint className="w-5 h-5 text-slate-300" />
                       )}
                     </td>
+                    <td className="px-4 py-3"><SeloBiometria e={e} /></td>
                     <td className="px-4 py-3 text-right">
                       <button
                         onClick={() => setTermo(e)}
@@ -127,7 +151,7 @@ export function HistoricoView() {
       {/* Modal do termo */}
       {termo && (
         <div
-          className="no-print fixed inset-0 z-50 bg-black/50 flex items-start justify-center overflow-y-auto p-4"
+          className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center overflow-y-auto p-4"
           onClick={() => setTermo(null)}
         >
           <div
@@ -152,7 +176,7 @@ export function HistoricoView() {
               </div>
             </div>
             <div className="p-4">
-              <TermoEntrega e={termo} />
+              <TermoEntrega e={termo} empresaCnpj={termoCnpj} />
             </div>
           </div>
         </div>

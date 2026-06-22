@@ -1,0 +1,89 @@
+// ----------------------------------------------------------------------------
+// JustSecurity — Segurança do Trabalho / EPI. Guarda só as TRANSAÇÕES (entrega
+// assinada, ficha de EPI, inspeção); cadastros (colaborador, EPI, empresa) vêm do
+// Core e entram como SNAPSHOT no momento do registro (valor jurídico do termo).
+//
+// Schema obtido por introspecção do banco real (prisma db pull) p/ preservar dados.
+// Legado intencional (não "consertar" sem migração de dados): `id` Int autoincrement
+// (referenciado por ficha_id/entrega_id/substitui_ficha_id) e datas como String ISO.
+// Postgres-ready via Prisma; flags bio_* ficam Int (0/1) como já estão gravadas.
+// ----------------------------------------------------------------------------
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+/// Entrega de EPI assinada (termo). hash + hash_anterior formam a CADEIA encadeada
+/// (prova de não-adulteração); o cálculo do hash vive no server, não aqui.
+model entregas {
+  id                    Int     @id @default(autoincrement())
+  colaborador_id        String?
+  colaborador_nome      String
+  colaborador_matricula String?
+  colaborador_cargo     String?
+  empresa_nome          String?
+  epi_id                String?
+  epi_nome              String
+  epi_ca                String?
+  quantidade            Int     @default(1)
+  entregue_em           String
+  assinatura_img        String?
+  assinatura_tipo       String?
+  observacao            String?
+  hash                  String?
+  hash_anterior         String?
+  motivo                String?
+  ficha_id              Int?
+  bio_enrolled          Int?
+  bio_match             Int?
+  bio_score             Float?
+}
+
+model fichas {
+  id                    Int     @id @default(autoincrement())
+  colaborador_id        String?
+  colaborador_nome      String
+  colaborador_matricula String?
+  colaborador_cargo     String?
+  empresa_nome          String?
+  epi_id                String?
+  epi_nome              String
+  epi_ca                String?
+  tipo_controle         String  @default("prazo")
+  validade_dias         Int?
+  alerta_dias           Int?
+  origem                String  @default("inicial")
+  entrega_id            Int?
+  entregue_em           String
+  vence_em              String?
+  proxima_inspecao_em   String?
+  status                String  @default("ativa")
+  baixa_motivo          String?
+  baixa_em              String?
+  baixa_obs             String?
+  substitui_ficha_id    Int?
+  created_at            String
+
+  @@index([colaborador_id], map: "idx_fichas_colab")
+  @@index([status], map: "idx_fichas_status")
+}
+
+model inspecoes {
+  id                  Int     @id @default(autoincrement())
+  ficha_id            Int
+  data                String
+  resultado           String
+  proxima_inspecao_em String?
+  inspetor            String?
+  observacao          String?
+  created_at          String
+  inspetor_id         String?
+  assinatura_img      String?
+  assinatura_tipo     String?
+
+  @@index([ficha_id], map: "idx_inspecoes_ficha")
+}

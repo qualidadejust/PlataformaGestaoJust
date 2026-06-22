@@ -29,6 +29,7 @@ model Empresa {
 
   obras         Obra[]
   colaboradores Colaborador[]
+  veiculos      Veiculo[]
 
   @@map("empresas")
 }
@@ -98,13 +99,30 @@ model Colaborador {
   created_at      DateTime @default(now())
   updated_at      DateTime @updatedAt
 
-  cargo     Cargo?     @relation(fields: [cargo_id], references: [id], onDelete: SetNull)
-  empresa   Empresa?   @relation(fields: [empresa_id], references: [id], onDelete: SetNull)
-  alocacoes Alocacao[]
+  cargo      Cargo?             @relation(fields: [cargo_id], references: [id], onDelete: SetNull)
+  empresa    Empresa?           @relation(fields: [empresa_id], references: [id], onDelete: SetNull)
+  alocacoes  Alocacao[]
+  biometrias BiometriaDigital[]
 
   @@index([cargo_id])
   @@index([empresa_id])
   @@map("colaboradores")
+}
+
+// Base biométrica: digitais cadastradas do colaborador (cadastro-mestre no Core).
+// Guardamos o TEMPLATE (SourceAFIS, não reversível à imagem) — usado para a
+// verificação 1:1 ao assinar no JustSecurity. Dado sensível (LGPD).
+model BiometriaDigital {
+  id             String   @id @default(uuid())
+  colaborador_id String
+  dedo           String? // indicador_direito | polegar_esquerdo | ...
+  template       String // template SourceAFIS (base64)
+  created_at     DateTime @default(now())
+
+  colaborador Colaborador @relation(fields: [colaborador_id], references: [id], onDelete: Cascade)
+
+  @@index([colaborador_id])
+  @@map("biometrias")
 }
 
 model Alocacao {
@@ -176,13 +194,38 @@ model Indicador {
   @@map("indicadores")
 }
 
+/// Custo mensal por cargo (referência da empresa, versionada por competência).
+/// Salário + encargos + provisões + benefícios = custo real p/ a empresa. Usado por Frota
+/// (custo do motorista), Obras (mão de obra) e RH. custo_hora = custo_mensal / jornada_horas.
+model CustoCargo {
+  id            String   @id @default(uuid())
+  cargo         String
+  competencia   String // YYYY-MM (vigência)
+  salario_base  Float?
+  custo_mensal  Float
+  jornada_horas Int      @default(220)
+  fonte         String? // ex.: "Convenção 2025/26 - Anexo 03.07"
+  observacao    String?
+  ativo         Boolean  @default(true)
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  @@unique([cargo, competencia])
+  @@index([cargo])
+  @@map("custos_cargo")
+}
+
 model Insumo {
   id            String   @id @default(uuid())
   nome          String
   categoria     String   @default("material") // epi | material | ferramenta | equipamento | consumivel
   unidade       String   @default("un") // un | par | m | m2 | kg | L | cx
   ca            String? // Certificado de Aprovação (obrigatório p/ EPI)
-  validade_dias Int? // vida útil estimada (informativo)
+  cod_sienge    String? // código do insumo no ERP Sienge
+  validade_dias Int? // durabilidade/vida útil estimada em dias
+  alerta_dias   Int? // dias antes do vencimento para começar a alertar
+  tipo_controle String   @default("prazo") // prazo (troca por período) | inspecao (inspeção periódica) | uso_unico (consumível)
+  inspecionavel Boolean  @default(false) // pode ser inspecionado na ficha (ex.: descartáveis não)
   descricao     String?
   fornecedor_id String?
   ativo         Boolean  @default(true)
@@ -193,4 +236,94 @@ model Insumo {
 
   @@index([categoria])
   @@map("insumos")
+}
+
+/// Veículo da frota — patrimônio (cadastro-mestre). As transações (viagens, abastecimentos,
+/// manutenções, custos fixos) ficam no app JustFrota e referenciam este ID. Os campos de
+/// patrimônio (FIPE/aquisição/consumo) alimentam a depreciação e o custo/km. Ver skill `frota-gestao`.
+model Veiculo {
+  id            String   @id @default(uuid())
+  placa         String?  @unique
+  identificacao String? // apelido interno (ex.: "Saveiro AZK", "Gol AZK")
+  modelo        String?
+  marca         String?
+  tipo          String   @default("carro") // carro | utilitario | caminhao | moto | maquina
+  ano           Int?
+  combustivel   String? // gasolina | etanol | diesel | flex
+  km_atual      Int?
+  empresa_id    String?
+  status        String   @default("ativo") // ativo | manutencao | inativo
+  observacao    String?
+  // patrimônio / base de custo (estudo de frota)
+  fipe_codigo    String? // código FIPE (ex.: "004370-2")
+  valor_fipe     Float? // valor de tabela FIPE atual (R$)
+  valor_aquisicao Float? // valor de compra (base da depreciação)
+  valor_residual  Float? // valor residual estimado ao fim da vida útil (R$)
+  vida_util_anos  Int? // vida útil contábil (anos) p/ depreciação
+  consumo_kml     Float? // consumo médio (km/L) p/ estimar custo de combustível por km
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  empresa Empresa? @relation(fields: [empresa_id], references: [id], onDelete: SetNull)
+
+  @@map("veiculos")
+}
+
+/// Catálogo de TIPOS de documento do GED (vocabulário controlado). Define o COMPORTAMENTO
+/// de cada tipo: a qual entidade se aplica, se é sensível, versiona, vence, retenção e se é
+/// obrigatório. Documento referencia pelo `codigo`. Ver skill `ged-documentos`.
+model TipoDocumento {
+  id              String   @id @default(uuid())
+  codigo          String   @unique // slug estável: aso | projeto_arq | alvara | contrato ...
+  nome            String // rótulo: "ASO", "Projeto Arquitetônico", "Alvará de Construção"
+  entidade_tipo   String // a qual entidade se aplica: colaborador | obra | ...
+  sensivel_padrao Boolean  @default(false) // saúde/biometria/bancário (LGPD)
+  versionavel     Boolean  @default(false) // controla revisões (ex.: projetos)
+  vence           Boolean  @default(false) // tem validade (ASO, licença, alvará)
+  retencao_dias   Int? // prazo de guarda padrão (LGPD)
+  obrigatorio     Boolean  @default(false) // exigido para a entidade (checklist documental)
+  ativo           Boolean  @default(true)
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  @@index([entidade_tipo])
+  @@map("tipos_documento")
+}
+
+/// Metadados de arquivos guardados FORA do banco (SharePoint em prod, disco local em dev).
+/// O byte vive no storage; aqui guardamos o PONTEIRO + a relação de negócio — a fonte de
+/// verdade sobre "qual arquivo é de quem". Relação polimórfica (entidade_tipo+entidade_id),
+/// sem FK, para servir a vários módulos. Ver docs/integracao-sharepoint.md e seção 10 do resumo.
+model Documento {
+  id             String   @id @default(uuid())
+  entidade_tipo  String // colaborador | obra | treinamento | entrega_epi | fvs | ...
+  entidade_id    String // id do cadastro/transação relacionado
+  categoria      String // bucket grosso: aso | projeto | foto | termo_epi | ...
+  tipo_codigo    String? // referencia TipoDocumento.codigo (classificação do GED)
+  nome_original  String
+  content_type   String?
+  tamanho        Int      @default(0)
+  hash           String?
+  sensivel       Boolean  @default(false) // saúde/biometria/bancário -> download mediado (LGPD)
+  metadados      String? // JSON livre por tipo (ex.: {disciplina, revisao} | {validade})
+  // versionamento (GED)
+  grupo_id       String // agrupa versões do mesmo documento lógico
+  versao         Int      @default(1)
+  status         String   @default("vigente") // vigente | substituido | obsoleto | vencido
+  valido_ate     String? // data de validade (ASO/licença/alvará) -> alerta
+  // ponteiro para o storage
+  storage_driver String   @default("local") // local | sharepoint
+  sp_drive_id    String? // Graph driveId (sharepoint)
+  sp_item_id     String // Graph itemId (sharepoint) OU caminho relativo (local)
+  sp_web_url     String? // link p/ abrir (exposto só p/ arquivo NÃO sensível)
+  uploaded_by    String? // quem subiu (quando houver auth no Core)
+  retido_ate     String? // política de retenção (LGPD)
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  @@index([entidade_tipo, entidade_id])
+  @@index([categoria])
+  @@index([grupo_id])
+  @@index([tipo_codigo])
+  @@map("documentos")
 }

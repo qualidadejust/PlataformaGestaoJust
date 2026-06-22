@@ -1,6 +1,6 @@
-import { ShieldCheck, Fingerprint } from "lucide-react";
+import { Fingerprint } from "lucide-react";
 import type { Entrega } from "../hooks/useEpi";
-import { EMPRESA } from "../lib/empresa";
+import { biometriaSelo } from "../hooks/useEpi";
 
 function fmtData(iso: string) {
   return new Date(iso).toLocaleString("pt-BR", { dateStyle: "long", timeStyle: "short" });
@@ -10,8 +10,11 @@ function fmtData(iso: string) {
  * Termo de Entrega e Responsabilidade de EPI — documento com valor jurídico,
  * imprimível (PDF). Inclui texto da NR-06, assinatura biométrica e o hash de
  * autenticidade (cadeia à prova de adulteração).
+ *
+ * O cabeçalho identifica o grupo (Construtora JUST) e a OBRA/empresa em que o
+ * colaborador está alocado (razão social + CNPJ vindos do Core, snapshot da entrega).
  */
-export function TermoEntrega({ e }: { e: Entrega }) {
+export function TermoEntrega({ e, empresaCnpj }: { e: Entrega; empresaCnpj?: string | null }) {
   const protocolo = `JSEC-EPI-${String(e.id).padStart(6, "0")}`;
 
   return (
@@ -19,14 +22,12 @@ export function TermoEntrega({ e }: { e: Entrega }) {
       <div className="p-8 text-[13px] leading-relaxed">
         {/* Cabeçalho */}
         <header className="flex items-start justify-between border-b border-slate-300 pb-4 mb-5">
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="w-7 h-7 text-brand-900" />
+          <div className="flex items-center gap-3">
+            <img src="/logos/logo-just.png" alt="Construtora JUST" className="h-12 w-auto object-contain" />
             <div>
-              <div className="font-bold text-base text-slate-900">{EMPRESA.nome}</div>
-              <div className="text-xs text-slate-600">CNPJ: {EMPRESA.cnpj}</div>
-              {EMPRESA.endereco !== "—" && (
-                <div className="text-xs text-slate-600">{EMPRESA.endereco}</div>
-              )}
+              <div className="font-bold text-base text-slate-900">Construtora JUST — Obra</div>
+              <div className="text-sm font-semibold text-slate-800">{e.empresa_nome ?? "—"}</div>
+              <div className="text-xs text-slate-600">CNPJ: {empresaCnpj ?? "—"}</div>
             </div>
           </div>
           <div className="text-right text-xs text-slate-600">
@@ -114,6 +115,18 @@ export function TermoEntrega({ e }: { e: Entrega }) {
               </div>
               <div>Leitor biométrico: HID DigitalPersona U.are.U 4500</div>
               <div>Coletado em: {fmtData(e.entregue_em)}</div>
+              {(() => {
+                const s = biometriaSelo(e);
+                if (s.estado === "confirmada")
+                  return (
+                    <div className="text-emerald-700 font-medium">
+                      Identidade verificada por biometria 1:1 (SourceAFIS · score {s.score?.toFixed(0)})
+                    </div>
+                  );
+                if (s.estado === "nao_cadastrado")
+                  return <div className="text-slate-500">Colaborador sem cadastro biométrico (não verificado).</div>;
+                return null;
+              })()}
             </div>
           </div>
         </section>

@@ -1,0 +1,100 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+/// ----------------------------------------------------------------------------
+/// JustFrota — gestão de frota da Plataforma JUST.
+/// Guarda só as TRANSAÇÕES (viagens; depois abastecimentos/manutenções/custos) e
+/// referencia os cadastros do Core (veículo, motorista=colaborador, obra) por ID,
+/// com snapshot do nome na hora. Ver skill `frota-gestao` e seção do resumo.
+/// ----------------------------------------------------------------------------
+
+/// Diário de bordo: uma viagem = veículo × motorista × obra (centro de custo) × km.
+model Viagem {
+  id             String   @id @default(uuid())
+  data           String // ISO YYYY-MM-DD
+  veiculo_id     String? // ID do Veiculo no Core
+  veiculo_nome   String? // snapshot (ex.: "Saveiro AZK")
+  motorista_id   String? // ID do Colaborador no Core
+  motorista_nome String? // snapshot
+  obra_id        String? // ID da Obra no Core (centro de custo do rateio)
+  obra_nome      String? // snapshot (ex.: "Matera by Just" | "Administração")
+  destino        String?
+  observacao     String?
+  hora_inicio    String?
+  hora_fim       String?
+  km_inicial     Int?
+  km_final       Int?
+  km_rodado      Int? // derivado (km_final - km_inicial) quando válido; null se inconsistente
+  status         String   @default("finalizada")
+  origem         String   @default("manual") // manual | importacao | whatsapp
+  criado_por     String?
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  @@index([veiculo_id])
+  @@index([obra_id])
+  @@index([data])
+  @@map("viagens")
+}
+
+/// Abastecimento de combustível (custo direto do veículo).
+model Abastecimento {
+  id           String   @id @default(uuid())
+  data         String // ISO YYYY-MM-DD
+  veiculo_id   String?
+  veiculo_nome String?
+  litros       Float?
+  valor        Float // R$
+  km           Int? // odômetro no abastecimento
+  combustivel  String? // gasolina | etanol | diesel | flex
+  posto        String?
+  observacao   String?
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  @@index([veiculo_id])
+  @@index([data])
+  @@map("abastecimentos")
+}
+
+/// Manutenção (custo direto do veículo).
+model Manutencao {
+  id           String   @id @default(uuid())
+  data         String // ISO YYYY-MM-DD
+  veiculo_id   String?
+  veiculo_nome String?
+  tipo         String   @default("corretiva") // preventiva | corretiva
+  descricao    String?
+  valor        Float // R$
+  km           Int?
+  fornecedor   String?
+  observacao   String?
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  @@index([veiculo_id])
+  @@index([data])
+  @@map("manutencoes")
+}
+
+/// Custo fixo mensal do veículo (rateado no tempo): IPVA, seguro, licenciamento, depreciação.
+model CustoFixo {
+  id           String   @id @default(uuid())
+  competencia  String // YYYY-MM (mês de competência)
+  veiculo_id   String?
+  veiculo_nome String?
+  tipo         String // ipva | seguro | licenciamento | depreciacao | financiamento | outro
+  descricao    String?
+  valor        Float // R$
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  @@index([veiculo_id])
+  @@index([competencia])
+  @@map("custos_fixos")
+}

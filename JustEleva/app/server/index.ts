@@ -21,6 +21,20 @@ const PORT = process.env.PORT ?? 3001;
 app.use(cors());
 app.use(express.json());
 
+// Cadastro (colaboradores, obras, alocações) é gerenciado no JustCore (fonte única).
+// Bloqueamos a escrita aqui para evitar divergência (o sync sobrescreveria).
+// Exceção: PUT /api/employees/:id/template é função de DESEMPENHO (modelo de avaliação).
+function bloqueiaCadastro(req: express.Request, res: express.Response, next: express.NextFunction) {
+  if (req.method === 'GET') return next();
+  if (req.method === 'PUT' && req.originalUrl.includes('/template')) return next();
+  return res.status(423).json({
+    error: 'Cadastro gerenciado no JustCore. Edite em http://localhost:4101 e rode `npm run sync:core`.',
+  });
+}
+app.use('/api/employees', bloqueiaCadastro);
+app.use('/api/obras', bloqueiaCadastro);
+app.use('/api/alocacoes', bloqueiaCadastro);
+
 app.use('/api/employees',   employeesRouter);
 app.use('/api/cycles',      cyclesRouter);
 app.use('/api/evaluations', evaluationsRouter);

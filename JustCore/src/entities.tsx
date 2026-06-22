@@ -8,6 +8,9 @@ import {
   MapPinned,
   Network,
   Gauge,
+  Car,
+  Coins,
+  FileText,
   type LucideIcon,
 } from "lucide-react";
 import type { Row } from "./hooks/useEntity";
@@ -55,13 +58,40 @@ const CATEGORIAS = [
   { value: "consumivel", label: "Consumível" },
 ];
 
-const UNIDADES = ["un", "par", "m", "m2", "kg", "L", "cx"].map((v) => ({ value: v, label: v }));
+const UNIDADES = ["un", "par", "m", "m2", "kg", "L", "cx", "pct"].map((v) => ({ value: v, label: v }));
+
+const TIPOS_CONTROLE = [
+  { value: "prazo", label: "Troca por prazo" },
+  { value: "inspecao", label: "Inspeção periódica" },
+  { value: "uso_unico", label: "Uso único" },
+];
 
 const PAPEIS = [
   { value: "residente", label: "Residente" },
   { value: "mestre", label: "Mestre" },
   { value: "mao_de_obra", label: "Mão de obra" },
   { value: "administrativo", label: "Administrativo" },
+];
+
+const TIPOS_VEICULO = [
+  { value: "carro", label: "Carro" },
+  { value: "utilitario", label: "Utilitário" },
+  { value: "caminhao", label: "Caminhão" },
+  { value: "moto", label: "Moto" },
+  { value: "maquina", label: "Máquina" },
+];
+
+const COMBUSTIVEIS = [
+  { value: "gasolina", label: "Gasolina" },
+  { value: "etanol", label: "Etanol" },
+  { value: "diesel", label: "Diesel" },
+  { value: "flex", label: "Flex" },
+];
+
+const STATUS_VEICULO = [
+  { value: "ativo", label: "Ativo" },
+  { value: "manutencao", label: "Manutenção" },
+  { value: "inativo", label: "Inativo" },
 ];
 
 export const ENTITIES: EntityConfig[] = [
@@ -286,7 +316,11 @@ export const ENTITIES: EntityConfig[] = [
       { key: "categoria", label: "Categoria", type: "select", options: CATEGORIAS, inList: true },
       { key: "unidade", label: "Unidade", type: "select", options: UNIDADES, inList: true },
       { key: "ca", label: "C.A. (EPI)", type: "text", inList: true },
-      { key: "validade_dias", label: "Validade (dias)", type: "number" },
+      { key: "cod_sienge", label: "Cód. Sienge", type: "text" },
+      { key: "tipo_controle", label: "Controle", type: "select", options: TIPOS_CONTROLE, inList: true },
+      { key: "inspecionavel", label: "Inspecionável", type: "boolean", inList: true },
+      { key: "validade_dias", label: "Durabilidade (dias)", type: "number" },
+      { key: "alerta_dias", label: "Alerta (dias antes)", type: "number" },
       {
         key: "fornecedor_id",
         label: "Fornecedor",
@@ -297,6 +331,74 @@ export const ENTITIES: EntityConfig[] = [
         render: (r) => r.fornecedor?.nome ?? "—",
       },
       { key: "descricao", label: "Descrição", type: "textarea" },
+      { key: "ativo", label: "Ativo", type: "boolean", inList: true },
+    ],
+  },
+  {
+    path: "veiculos",
+    label: "Veículos",
+    singular: "Veículo",
+    icon: Car,
+    title: (r) => r.identificacao ?? r.placa ?? r.modelo,
+    fields: [
+      { key: "identificacao", label: "Identificação (apelido)", type: "text", required: true, inList: true },
+      { key: "placa", label: "Placa", type: "text", inList: true },
+      { key: "modelo", label: "Modelo", type: "text", inList: true },
+      { key: "marca", label: "Marca", type: "text" },
+      { key: "tipo", label: "Tipo", type: "select", options: TIPOS_VEICULO, inList: true },
+      { key: "ano", label: "Ano", type: "number" },
+      { key: "combustivel", label: "Combustível", type: "select", options: COMBUSTIVEIS },
+      { key: "km_atual", label: "Km atual", type: "number", inList: true },
+      {
+        key: "empresa_id",
+        label: "Empresa",
+        type: "ref",
+        refPath: "empresas",
+        refLabel: (e) => e.nome_fantasia ?? e.razao_social,
+        render: (r) => r.empresa?.nome_fantasia ?? r.empresa?.razao_social ?? "—",
+      },
+      { key: "status", label: "Status", type: "select", options: STATUS_VEICULO, inList: true },
+      { key: "fipe_codigo", label: "Código FIPE", type: "text" },
+      { key: "valor_fipe", label: "Valor FIPE (R$)", type: "number", inList: true },
+      { key: "consumo_kml", label: "Consumo (km/L)", type: "number" },
+      { key: "valor_aquisicao", label: "Valor de aquisição (R$)", type: "number" },
+      { key: "valor_residual", label: "Valor residual (R$)", type: "number" },
+      { key: "vida_util_anos", label: "Vida útil (anos)", type: "number" },
+      { key: "observacao", label: "Observação", type: "textarea" },
+    ],
+  },
+  {
+    path: "tipos-documento",
+    label: "Tipos de documento (GED)",
+    singular: "Tipo de documento",
+    icon: FileText,
+    title: (r) => r.nome,
+    fields: [
+      { key: "codigo", label: "Código (slug)", type: "text", required: true, inList: true },
+      { key: "nome", label: "Nome", type: "text", required: true, inList: true },
+      { key: "entidade_tipo", label: "Aplica-se a", type: "text", required: true, inList: true },
+      { key: "sensivel_padrao", label: "Sensível (LGPD)", type: "boolean", inList: true },
+      { key: "versionavel", label: "Versionável", type: "boolean", inList: true },
+      { key: "vence", label: "Tem validade", type: "boolean", inList: true },
+      { key: "retencao_dias", label: "Retenção (dias)", type: "number" },
+      { key: "obrigatorio", label: "Obrigatório", type: "boolean" },
+      { key: "ativo", label: "Ativo", type: "boolean", inList: true },
+    ],
+  },
+  {
+    path: "custos-cargo",
+    label: "Custos por cargo",
+    singular: "Custo por cargo",
+    icon: Coins,
+    title: (r) => `${r.cargo} (${r.competencia})`,
+    fields: [
+      { key: "cargo", label: "Cargo", type: "text", required: true, inList: true },
+      { key: "competencia", label: "Competência (AAAA-MM)", type: "text", required: true, inList: true },
+      { key: "salario_base", label: "Salário base (R$)", type: "number", inList: true },
+      { key: "custo_mensal", label: "Custo mensal + provisões (R$)", type: "number", required: true, inList: true },
+      { key: "jornada_horas", label: "Jornada (h/mês)", type: "number" },
+      { key: "fonte", label: "Fonte (anexo)", type: "text", inList: true },
+      { key: "observacao", label: "Observação", type: "textarea" },
       { key: "ativo", label: "Ativo", type: "boolean", inList: true },
     ],
   },

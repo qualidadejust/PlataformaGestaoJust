@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Motor de comparação de digitais (open-source, Apache-2.0) -->
+    <PackageReference Include="SourceAFIS" Version="3.14.0" />
+    <!-- Decodificação do PNG capturado pelo leitor (Apache-2.0) -->
+    <PackageReference Include="SixLabors.ImageSharp" Version="2.1.9" />
+  </ItemGroup>
+
+</Project>

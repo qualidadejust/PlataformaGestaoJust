@@ -1,17 +1,21 @@
 import { useState } from "react";
-import { ShieldCheck, HardHat, History } from "lucide-react";
+import { ShieldCheck, HardHat, History, ClipboardList, FileBarChart } from "lucide-react";
 import { EntregaEpiView } from "./views/EntregaEpiView";
 import { HistoricoView } from "./views/HistoricoView";
+import { FichasView } from "./views/FichasView";
+import { RelatorioView } from "./views/RelatorioView";
 import { cn } from "./lib/utils";
 
-type View = "entrega" | "historico";
+type View = "entrega" | "fichas" | "relatorio" | "historico";
 
 export default function App() {
-  const [view, setView] = useState<View>("entrega");
+  const [view, setView] = useState<View>("fichas");
 
   const itens = [
+    { id: "fichas" as const, label: "Fichas & Validade", icon: ClipboardList },
     { id: "entrega" as const, label: "Entrega de EPI", icon: HardHat },
-    { id: "historico" as const, label: "Histórico", icon: History },
+    { id: "relatorio" as const, label: "Relatório mensal", icon: FileBarChart },
+    { id: "historico" as const, label: "Histórico jurídico", icon: History },
   ];
 
   return (
@@ -50,7 +54,10 @@ export default function App() {
       </aside>
 
       <main className="flex-1 overflow-y-auto p-8">
-        {view === "entrega" ? <EntregaEpiView /> : <HistoricoView />}
+        {view === "fichas" && <FichasView />}
+        {view === "entrega" && <EntregaEpiView />}
+        {view === "relatorio" && <RelatorioView />}
+        {view === "historico" && <HistoricoView />}
       </main>
     </div>
   );

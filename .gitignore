@@ -13,6 +13,7 @@ build/
 *.db-shm
 *.db-wal
 *.db-journal
+*.bak*
 
 # Pastas de dados e planilhas com DADOS PESSOAIS (LGPD): CPF, RG, PIS, endereços
 data/
@@ -32,3 +33,7 @@ npm-debug.log*
 # Sistema operacional
 .DS_Store
 Thumbs.db
+
+# .NET (serviço de biometria)
+bin/
+obj/
