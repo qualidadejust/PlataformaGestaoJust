@@ -8,5 +8,7 @@ prisma/dev.db-wal
 prisma/dev.db-shm
 
 # arquivos do storage local (dev) e segredos
-storage/
+# ANCORADO na raiz do app: ignora só a pasta de DADOS (JustCore/storage/),
+# não a pasta de CÓDIGO server/lib/storage/.
+/storage/
 .env
