@@ -48,8 +48,13 @@ Biometria .NET (4002) ◄── Core e Security mandam probe+candidates; devolve
 - **React 19** + **Vite 6** + **TypeScript** (`tsc --noEmit` como lint, sem ESLint).
 - **Tailwind CSS v4** via `@tailwindcss/vite` (config no CSS, não em `tailwind.config`).
 - **@tanstack/react-query** (dados), **lucide-react** (ícones), **clsx + tailwind-merge** (`cn()`).
-- Backend: **Express 4** + **Prisma 7** (Core/Eleva) ou **better-sqlite3** direto (Security).
-- Banco: **SQLite** por app (gitignored). IDs em **UUID**, tabelas **snake_case**.
+- Backend: **Express 4** + **Prisma 7** (todos os apps com dados — Core/Eleva/Security/Train/Frota).
+- Banco: **PostgreSQL** por app (provider `postgresql`, adapter `@prisma/adapter-pg`), via
+  **Neon** (free tier persistente) — `DATABASE_URL` no `.env`, lido em `prisma.config.ts` e no
+  client. IDs em **UUID**, tabelas **snake_case** (legado do Security: `id` Int/datas String,
+  válidos no Postgres). **No Prisma 7 a URL não vai no `schema.prisma`** (só o `provider`); fica
+  no `prisma.config.ts` (`datasource.url = process.env.DATABASE_URL`). Migrar de Postgres p/
+  outro Postgres é só trocar a URL.
 - Biometria: **.NET + SourceAFIS** (matching) + **@digitalpersona/websdk** (captura no cliente).
 
 ## 4. JustCore — dados-mestre
@@ -235,14 +240,32 @@ em `JustCore/prisma/` (`import-*.ts`). Chaves/segredos nunca no front.
   Hetzner/Contabo. **Começar em 4 GB + swap 2–4 GB** e escalar sob demanda (upgrade de VPS é
   trivial, não muda arquitetura). Evitar 2 GB (o `build` estoura). HostGator: só a linha
   **VPS** (com root), não a compartilhada.
-- **Padronização de dados (concluída):** **toda** a plataforma usa **Prisma** como camada de
-  portabilidade (SQLite hoje, **PostgreSQL-ready**), sem SQL cru. Core/Eleva/Frota já eram
-  Prisma; `JustEleva/app/server/db.ts` (código morto) **removido**; **JustSecurity portado de
-  `better-sqlite3` cru para Prisma** (schema introspectado → baseline `prisma/migrations/0_init`,
-  `id` Int autoincrement e datas String preservados como legado; cadeia de hash da entrega
-  assinada mantida e validada). `DATABASE_URL` no `.env`/`prisma.config.ts` em todos. Migração
-  SQLite→Postgres só com gatilho real (banco único compartilhado, `database is locked`, backup
-  gerenciado/réplica, multi-servidor). **Toda demanda de dados passa pela skill `banco-dados`.**
+- **Deploy zero-custo (em andamento): Render + Neon + SharePoint.** Decisão de infra para
+  hospedar sem custo (alternativa ao VPS pago acima):
+  - **Front-ends** (todos os Vite/React) → **build estático** em **Render Static Sites**
+    (grátis, sem spin-down, sem limite de horas).
+  - **Backends Node** → **consolidados num único Render Web Service** (free tier tem ~750h/mês
+    compartilhadas e spin-down após 15 min; 6 serviços separados não cabem). Cada Express vira
+    um router montado num path. *(Consolidação = Fase 2, pendente.)*
+  - **Banco** → **Neon Postgres** (free tier **persistente** — não usar o Postgres do próprio
+    Render, que é apagado em ~30 dias). Cada app = um database no mesmo projeto Neon.
+  - **Arquivos** → **SharePoint/Graph** (já implementado; M365 da empresa).
+  - **Biometria** → `.NET` + leitor HID ficam no **totem Windows local** (LAN); a nuvem só
+    guarda templates (free tier derrubaria o match com cold-start).
+- **Port SQLite → PostgreSQL (concluído no código):** **toda** a plataforma usa **Prisma** com
+  provider `postgresql` + adapter `@prisma/adapter-pg` (driver `pg`). Os 5 apps com dados
+  (Core/Eleva/Security/Train/Frota) tiveram `provider` trocado, `prisma.config.ts`/client lendo
+  `DATABASE_URL`, e **baseline única `prisma/migrations/0_init` regerada para Postgres** (offline
+  via `prisma migrate diff`, `migration_lock.toml` = postgresql). Security mantém o legado (`id`
+  SERIAL/datas TEXT; **cadeia de hash da entrega assinada intacta**). `JustEleva/app/server/db.ts`
+  (código morto) já fora removido. **Projeto Neon `plataforma-just` (região sa-east-1) criado**,
+  com 5 bancos (`justcore`/`justeleva`/`justsecurity`/`justtrain`/`justfrota`); `migrate deploy`
+  rodado em todos (usar a conexão **direta** — sem `-pooler` — no migrate, pois o pooler/PgBouncer
+  não suporta os advisory locks; **pooled** no runtime). **Dados SQLite→Postgres copiados e
+  validados** (Core 599 / Eleva 571 / Train 310 / Frota 223 / Security 6 linhas; contagens batem,
+  cadeia de hash do Security íntegra, sequences SERIAL resetadas) via copiador genérico dirigido
+  pelo DMMF (coage Boolean 0/1→bool e DateTime ISO→Date, ordem por FK com retry, idempotente).
+  **Toda demanda de dados passa pela skill `banco-dados`.**
 - **Biometria no mobile**: HID 4500 + WebSDK **não** roda em celular/tablet (é Windows).
   Caminhos: (a) manter um desktop/notebook Windows como "totem" com o leitor — sem reescrever;
   (b) leitor com **SDK Android** + app nativo enviando template ao VPS p/ SourceAFIS (projeto

@@ -14,7 +14,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
 }
 
 /// Entrega de EPI assinada (termo). hash + hash_anterior formam a CADEIA encadeada
