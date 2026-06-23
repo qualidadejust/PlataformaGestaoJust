@@ -279,6 +279,13 @@ em `JustCore/prisma/` (`import-*.ts`). Chaves/segredos nunca no front.
     O totem só precisa estar ligado durante entregas/treinamentos. Passo a passo no guia abaixo.
   - **Guia de deploy completo:** `docs/deploy-render.md` (Blueprint, variáveis por serviço,
     validação, biometria via túnel, migrations com conexão direta).
+  - **Segurança/acesso (em construção):** o deploy é **público** (URLs `*.onrender.com`, CORS
+    liberado) e a plataforma **ainda não tem autenticação** — antes de operar com a base real,
+    entra o **controle de acesso** (skill `controle-acesso`): **auth centralizado no JustCore**
+    (login/senha bcrypt → **JWT** validado por cada backend; `Usuario`→`Colaborador`, perfis/RBAC,
+    `LogAcesso` p/ auditoria LGPD). O `src/api-base.ts` dos fronts será o ponto único que injeta o
+    `Authorization: Bearer`. **Cadeado provisório**: Basic Auth no gateway (`GATEWAY_USER/PASS`)
+    fecha o acesso público até o JWT entrar — depois é substituído pela validação de Bearer.
 - **Port SQLite → PostgreSQL (concluído no código):** **toda** a plataforma usa **Prisma** com
   provider `postgresql` + adapter `@prisma/adapter-pg` (driver `pg`). Os 5 apps com dados
   (Core/Eleva/Security/Train/Frota) tiveram `provider` trocado, `prisma.config.ts`/client lendo
