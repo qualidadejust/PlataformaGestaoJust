@@ -37,12 +37,23 @@ const BACKENDS: Backend[] = [
   { name: "gate", dir: "JustGate", port: 4200 },
 ];
 
+// Internamente os apps falam com o Core pela porta fixa (sem passar pelo proxy).
+const INTERNAL_CORE_URL = "http://127.0.0.1:4100";
+
 // 1) Sobe cada backend como processo-filho, na sua porta interna fixa.
 for (const b of BACKENDS) {
   const cwd = path.join(ROOT, b.dir);
+  // Cada app lê DATABASE_URL (mesmo nome) mas precisa de um banco diferente. Na produção
+  // (Render) a URL de cada um vem de DATABASE_URL_CORE / _ELEVA / _SECURITY / _TRAIN / _FROTA;
+  // localmente, deixamos o app carregar o seu próprio .env (não injetamos DATABASE_URL).
+  const childEnv: NodeJS.ProcessEnv = { ...process.env, PORT: String(b.port), CORE_URL: INTERNAL_CORE_URL };
+  const perAppDb = process.env[`DATABASE_URL_${b.name.toUpperCase()}`];
+  if (perAppDb) childEnv.DATABASE_URL = perAppDb;
+  else delete childEnv.DATABASE_URL; // evita vazar uma DATABASE_URL do gateway p/ o app errado
+
   const child = spawn("npm", ["run", "start"], {
     cwd,
-    env: { ...process.env, PORT: String(b.port) }, // não muta process.env (gateway mantém $PORT)
+    env: childEnv, // não muta process.env (gateway mantém o $PORT do container)
     stdio: "inherit",
     shell: true,
   });

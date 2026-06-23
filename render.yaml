@@ -1,0 +1,58 @@
+# Render Blueprint — Plataforma de Gestão JUST (deploy zero-custo).
+#
+# Fase 3 (backend): UM web service (free) roda o gateway, que sobe os 6 backends Node em
+# portas internas e roteia por path (/core, /eleva, /security, /train, /frota, /gate).
+# Banco: Neon Postgres (free, persistente). Arquivos: SharePoint/Graph (Core).
+#
+# Os fronts (Vite estáticos) entram como static sites num passo seguinte — precisam de um
+# base de API configurável no build (apontando para a URL deste gateway).
+#
+# Segredos (sync:false) são preenchidos no painel do Render, nunca versionados.
+
+services:
+  - type: web
+    name: just-gateway
+    runtime: node
+    plan: free
+    region: virginia # us-east — menor latência até o Neon sa-east-1 entre as regiões do Render
+    rootDir: .
+    # --include=dev garante tsx e o CLI do Prisma (usados em runtime/generate) mesmo se o
+    # Render rodar o build com NODE_ENV=production.
+    buildCommand: >-
+      npm --prefix JustCore install --include=dev && npm --prefix JustCore run db:generate &&
+      npm --prefix JustEleva/app install --include=dev && npm --prefix JustEleva/app run db:generate &&
+      npm --prefix JustSecurity install --include=dev && npm --prefix JustSecurity run db:generate &&
+      npm --prefix JustTrain install --include=dev && npm --prefix JustTrain run db:generate &&
+      npm --prefix JustFrota install --include=dev && npm --prefix JustFrota run db:generate &&
+      npm --prefix JustGate install --include=dev &&
+      npm --prefix gateway install --include=dev
+    startCommand: npm --prefix gateway start
+    healthCheckPath: /health
+    envVars:
+      # Um banco Neon por app (connection string POOLED, sslmode=require).
+      - key: DATABASE_URL_CORE
+        sync: false
+      - key: DATABASE_URL_ELEVA
+        sync: false
+      - key: DATABASE_URL_SECURITY
+        sync: false
+      - key: DATABASE_URL_TRAIN
+        sync: false
+      - key: DATABASE_URL_FROTA
+        sync: false
+      # Arquivos (Core) — SharePoint / Microsoft Graph.
+      - key: STORAGE_DRIVER
+        value: sharepoint
+      - key: SP_TENANT_ID
+        sync: false
+      - key: SP_CLIENT_ID
+        sync: false
+      - key: SP_CLIENT_SECRET
+        sync: false
+      - key: SP_SITE
+        value: justconstrutora.sharepoint.com:/sites/PlataformaJust
+      # Biometria (.NET no totem local) e match.
+      - key: BIOMETRIA_URL
+        sync: false
+      - key: MATCH_THRESHOLD
+        value: "40"

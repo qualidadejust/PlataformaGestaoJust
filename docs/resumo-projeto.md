@@ -243,7 +243,15 @@ em `JustCore/prisma/` (`import-*.ts`). Chaves/segredos nunca no front.
 - **Deploy zero-custo (em andamento): Render + Neon + SharePoint.** Decisão de infra para
   hospedar sem custo (alternativa ao VPS pago acima):
   - **Front-ends** (todos os Vite/React) → **build estático** em **Render Static Sites**
-    (grátis, sem spin-down, sem limite de horas).
+    (grátis, sem spin-down, sem limite de horas). *Pendente (Fase 3b):* cada front fala com 2
+    backends (o próprio `/api` + o Core `/core`) por caminho relativo (proxy do Vite em dev); como
+    static site em outra origem isso não resolve, e o Render **não** faz proxy de static site →
+    backend externo. Solução: **base de API configurável no build** por front (`VITE_*`) apontando
+    para os paths do gateway (Security: `/api`→`/security`, `/core`→`/core`; etc.). O `JustHub`
+    (`src/modules.ts`) precisa trocar os `url`/`healthUrl` `localhost` pelas URLs do Render.
+  - **Manifesto `render.yaml`** (raiz): Fase 3a entrega o **web service do gateway** (build instala
+    os 6 apps + `prisma generate`, start = `gateway`; segredos via `sync:false` no painel). Static
+    sites dos fronts entram na Fase 3b.
   - **Backends Node** → **consolidados num único Render Web Service** (free tier tem ~750h/mês
     compartilhadas e spin-down após 15 min; 6 serviços separados não cabem). **Implementado em
     `gateway/`** (Fase 2): NÃO dá pra montar os 6 Express como routers num só processo porque
