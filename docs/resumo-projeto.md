@@ -272,8 +272,11 @@ em `JustCore/prisma/` (`import-*.ts`). Chaves/segredos nunca no front.
   - **Banco** → **Neon Postgres** (free tier **persistente** — não usar o Postgres do próprio
     Render, que é apagado em ~30 dias). Cada app = um database no mesmo projeto Neon.
   - **Arquivos** → **SharePoint/Graph** (já implementado; M365 da empresa).
-  - **Biometria** → `.NET` + leitor HID ficam no **totem Windows local** (LAN); a nuvem só
-    guarda templates (free tier derrubaria o match com cold-start).
+  - **Biometria** → `.NET` SourceAFIS + leitor HID ficam no **totem Windows local** (Windows-only).
+    O gateway na nuvem alcança o `.NET` (4002) via **túnel grátis** (cloudflared) → `BIOMETRIA_URL`.
+    O totem só precisa estar ligado durante entregas/treinamentos. Passo a passo no guia abaixo.
+  - **Guia de deploy completo:** `docs/deploy-render.md` (Blueprint, variáveis por serviço,
+    validação, biometria via túnel, migrations com conexão direta).
 - **Port SQLite → PostgreSQL (concluído no código):** **toda** a plataforma usa **Prisma** com
   provider `postgresql` + adapter `@prisma/adapter-pg` (driver `pg`). Os 5 apps com dados
   (Core/Eleva/Security/Train/Frota) tiveram `provider` trocado, `prisma.config.ts`/client lendo
