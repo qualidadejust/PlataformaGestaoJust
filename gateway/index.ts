@@ -1,8 +1,10 @@
 // Gateway de deploy da Plataforma JUST.
 //
-// Por que existe: o Render free tier dá UMA porta por serviço. Em vez de 6 web services
-// (não cabem no free tier), este processo sobe os 6 backends Node como processos-filhos em
-// portas INTERNAS fixas e roteia o tráfego externo por path com um proxy reverso no $PORT.
+// Por que existe: o Render free tier dá UMA porta por serviço (e só 512 MB). Em vez de 6 web
+// services (não cabem no free tier), este processo roteia o tráfego externo por path com um
+// proxy reverso no $PORT e sobe cada backend Node como processo-filho — em LAZY START: o app
+// só é iniciado na 1ª requisição ao seu path. Em ocioso, fica só o gateway (~50 MB); sob uso
+// típico, só os apps realmente acessados consomem RAM (cabe nos 512 MB).
 //
 // - Tráfego externo:  GET /core/api/...  ->  127.0.0.1:4100/api/...   (o prefixo é removido)
 // - Tráfego interno (app->Core): continua direto em http://127.0.0.1:4100 (sem passar aqui).
@@ -13,6 +15,7 @@ import "dotenv/config";
 import express from "express";
 import { createProxyMiddleware } from "http-proxy-middleware";
 import { spawn } from "node:child_process";
+import net from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -21,6 +24,8 @@ const ROOT = path.resolve(__dirname, "..");
 
 // Porta pública do container (Render injeta $PORT). Lida ANTES de spawnar os filhos.
 const GATEWAY_PORT = Number(process.env.PORT ?? 8080);
+// Quanto esperar um backend ficar pronto na 1ª requisição (cold start do app).
+const READY_TIMEOUT_MS = 60_000;
 
 interface Backend {
   name: string; // prefixo de rota (/core, /eleva, ...)
@@ -40,8 +45,33 @@ const BACKENDS: Backend[] = [
 // Internamente os apps falam com o Core pela porta fixa (sem passar pelo proxy).
 const INTERNAL_CORE_URL = "http://127.0.0.1:4100";
 
-// 1) Sobe cada backend como processo-filho, na sua porta interna fixa.
-for (const b of BACKENDS) {
+// Promise de prontidão por backend (existe = já foi iniciado).
+const ready = new Map<string, Promise<void>>();
+
+/** Resolve quando a porta aceitar conexão TCP (ou rejeita no timeout). */
+function waitForPort(port: number, timeoutMs: number): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  return new Promise((resolve, reject) => {
+    const tryOnce = () => {
+      const sock = net.connect({ host: "127.0.0.1", port }, () => {
+        sock.destroy();
+        resolve();
+      });
+      sock.on("error", () => {
+        sock.destroy();
+        if (Date.now() > deadline) reject(new Error(`timeout esperando porta ${port}`));
+        else setTimeout(tryOnce, 400);
+      });
+    };
+    tryOnce();
+  });
+}
+
+/** Sobe o backend (se ainda não subiu) e espera ficar pronto. Idempotente. */
+function ensureStarted(b: Backend): Promise<void> {
+  let p = ready.get(b.name);
+  if (p) return p;
+
   const cwd = path.join(ROOT, b.dir);
   // Cada app lê DATABASE_URL (mesmo nome) mas precisa de um banco diferente. Na produção
   // (Render) a URL de cada um vem de DATABASE_URL_CORE / _ELEVA / _SECURITY / _TRAIN / _FROTA;
@@ -51,33 +81,54 @@ for (const b of BACKENDS) {
   if (perAppDb) childEnv.DATABASE_URL = perAppDb;
   else delete childEnv.DATABASE_URL; // evita vazar uma DATABASE_URL do gateway p/ o app errado
 
+  console.log(`[${b.name}] iniciando (lazy)…`);
   const child = spawn("npm", ["run", "start"], {
     cwd,
     env: childEnv, // não muta process.env (gateway mantém o $PORT do container)
     stdio: "inherit",
     shell: true,
   });
-  child.on("exit", (code) => console.error(`[${b.name}] processo saiu com código ${code}`));
+  // Se o processo morrer, esquece a prontidão p/ poder reiniciar na próxima requisição.
+  child.on("exit", (code) => {
+    console.error(`[${b.name}] processo saiu com código ${code}`);
+    ready.delete(b.name);
+  });
+
+  p = waitForPort(b.port, READY_TIMEOUT_MS);
+  ready.set(b.name, p);
+  // Se não ficar pronto, limpa p/ tentar de novo depois.
+  p.catch(() => ready.delete(b.name));
+  return p;
 }
 
-// 2) Proxy reverso no $PORT, roteando por path.
+// Proxy reverso no $PORT, com lazy start por path.
 const app = express();
 
 app.get(["/", "/health"], (_req, res) => {
-  res.json({ ok: true, gateway: true, rotas: BACKENDS.map((b) => `/${b.name}`) });
+  res.json({
+    ok: true,
+    gateway: true,
+    rotas: BACKENDS.map((b) => `/${b.name}`),
+    iniciados: [...ready.keys()],
+  });
 });
 
 for (const b of BACKENDS) {
-  app.use(
-    `/${b.name}`,
-    createProxyMiddleware({
-      target: `http://127.0.0.1:${b.port}`,
-      changeOrigin: true,
-      pathRewrite: { [`^/${b.name}`]: "" }, // /core/api/health -> /api/health
-    })
-  );
+  const proxy = createProxyMiddleware({
+    target: `http://127.0.0.1:${b.port}`,
+    changeOrigin: true,
+    pathRewrite: { [`^/${b.name}`]: "" }, // /core/api/health -> /api/health
+  });
+  app.use(`/${b.name}`, (req, res, next) => {
+    ensureStarted(b)
+      .then(() => proxy(req, res, next))
+      .catch((e) => {
+        console.error(`[${b.name}] falhou ao iniciar:`, e?.message);
+        res.status(503).json({ error: `backend ${b.name} não subiu a tempo` });
+      });
+  });
 }
 
 app.listen(GATEWAY_PORT, () =>
-  console.log(`Gateway na porta ${GATEWAY_PORT} → ${BACKENDS.map((b) => b.name).join(", ")}`)
+  console.log(`Gateway na porta ${GATEWAY_PORT} (lazy) → ${BACKENDS.map((b) => b.name).join(", ")}`)
 );

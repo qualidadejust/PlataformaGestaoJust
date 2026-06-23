@@ -267,8 +267,10 @@ em `JustCore/prisma/` (`import-*.ts`). Chaves/segredos nunca no front.
     Apps que lêem `process.env.PORT` (Eleva/Frota/Gate) recebem a porta interna explícita do
     gateway. Chamadas **entre apps** continuam diretas (`127.0.0.1:4100`), sem passar pelo proxy.
     Cada backend ganhou script **`start`** (`tsx server/index.ts`, sem watch/vite/biometria).
-    *Risco do free tier: 6 processos + proxy em 512 MB — apertado; fallback = instância paga
-    (US$7/mês).*
+    **LAZY START** (necessário p/ caber em 512 MB): subir os 6 no boot estourou a RAM no Render
+    (OOM); então o gateway inicia cada backend **só na 1ª requisição ao seu path** (`ensureStarted`
+    + `waitForPort`), reiniciando-o se cair. Em ocioso roda só o gateway (~50 MB); sob uso típico,
+    só os apps acessados consomem RAM. O `/health` não dispara backend (mostra `iniciados`).
   - **Banco** → **Neon Postgres** (free tier **persistente** — não usar o Postgres do próprio
     Render, que é apagado em ~30 dias). Cada app = um database no mesmo projeto Neon.
   - **Arquivos** → **SharePoint/Graph** (já implementado; M365 da empresa).
