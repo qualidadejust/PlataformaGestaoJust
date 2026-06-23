@@ -1,3 +1,4 @@
+import "./api-base.ts"; // instala o prefixo de API em produção (deve vir primeiro)
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";

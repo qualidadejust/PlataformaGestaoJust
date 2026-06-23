@@ -243,15 +243,19 @@ em `JustCore/prisma/` (`import-*.ts`). Chaves/segredos nunca no front.
 - **Deploy zero-custo (em andamento): Render + Neon + SharePoint.** Decisão de infra para
   hospedar sem custo (alternativa ao VPS pago acima):
   - **Front-ends** (todos os Vite/React) → **build estático** em **Render Static Sites**
-    (grátis, sem spin-down, sem limite de horas). *Pendente (Fase 3b):* cada front fala com 2
+    (grátis, sem spin-down, sem limite de horas). **Fase 3b feita:** cada front fala com 2
     backends (o próprio `/api` + o Core `/core`) por caminho relativo (proxy do Vite em dev); como
-    static site em outra origem isso não resolve, e o Render **não** faz proxy de static site →
-    backend externo. Solução: **base de API configurável no build** por front (`VITE_*`) apontando
-    para os paths do gateway (Security: `/api`→`/security`, `/core`→`/core`; etc.). O `JustHub`
-    (`src/modules.ts`) precisa trocar os `url`/`healthUrl` `localhost` pelas URLs do Render.
-  - **Manifesto `render.yaml`** (raiz): Fase 3a entrega o **web service do gateway** (build instala
-    os 6 apps + `prisma generate`, start = `gateway`; segredos via `sync:false` no painel). Static
-    sites dos fronts entram na Fase 3b.
+    static site em outra origem isso não resolve. Solução **sem mexer nas chamadas**: um
+    **interceptor de `fetch`** (`src/api-base.ts`, importado primeiro no `main.tsx`) que em produção
+    prefixa `/api` e `/core` com a URL do gateway, a partir de `VITE_GATEWAY` (host do gateway, via
+    `fromService`) + `VITE_API_PREFIX` (prefixo do app: `/core`,`/eleva`,`/security`,`/train`,
+    `/frota`; o Docs usa `/core`). Em dev (sem `VITE_GATEWAY`) é no-op. O `JustHub` (`src/modules.ts`)
+    monta `url` (de `VITE_URL_<KEY>`) e `healthUrl` (do gateway) por env, com fallback localhost.
+    CORS já liberado (`app.use(cors())` em todos). Todos os 7 fronts buildam com o interceptor.
+  - **Manifesto `render.yaml`** (raiz): **1 web service do gateway** (build instala os 6 apps +
+    `prisma generate`, start = `gateway`; segredos via `sync:false`) + **7 static sites** dos fronts
+    (`VITE_GATEWAY` por `fromService`, `VITE_API_PREFIX` por front, SPA fallback → `index.html`;
+    Hub recebe os `VITE_URL_*` dos outros sites por `fromService`).
   - **Backends Node** → **consolidados num único Render Web Service** (free tier tem ~750h/mês
     compartilhadas e spin-down após 15 min; 6 serviços separados não cabem). **Implementado em
     `gateway/`** (Fase 2): NÃO dá pra montar os 6 Express como routers num só processo porque
