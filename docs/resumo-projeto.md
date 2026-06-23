@@ -245,8 +245,18 @@ em `JustCore/prisma/` (`import-*.ts`). Chaves/segredos nunca no front.
   - **Front-ends** (todos os Vite/React) → **build estático** em **Render Static Sites**
     (grátis, sem spin-down, sem limite de horas).
   - **Backends Node** → **consolidados num único Render Web Service** (free tier tem ~750h/mês
-    compartilhadas e spin-down após 15 min; 6 serviços separados não cabem). Cada Express vira
-    um router montado num path. *(Consolidação = Fase 2, pendente.)*
+    compartilhadas e spin-down após 15 min; 6 serviços separados não cabem). **Implementado em
+    `gateway/`** (Fase 2): NÃO dá pra montar os 6 Express como routers num só processo porque
+    cada app tem o seu **Prisma Client** gerado sob o mesmo nome `@prisma/client` (colidem). Em
+    vez disso, o `gateway/index.ts` sobe os 6 backends como **processos-filhos** em portas
+    internas fixas (Core 4100, Eleva 3001, Security 4001, Train 4600, Frota 4300, Gate 4200) e
+    roda um **proxy reverso** (http-proxy-middleware) no `$PORT` roteando por path
+    (`/core`,`/eleva`,…; o prefixo é removido). Cada app mantém seu node_modules/Prisma Client.
+    Apps que lêem `process.env.PORT` (Eleva/Frota/Gate) recebem a porta interna explícita do
+    gateway. Chamadas **entre apps** continuam diretas (`127.0.0.1:4100`), sem passar pelo proxy.
+    Cada backend ganhou script **`start`** (`tsx server/index.ts`, sem watch/vite/biometria).
+    *Risco do free tier: 6 processos + proxy em 512 MB — apertado; fallback = instância paga
+    (US$7/mês).*
   - **Banco** → **Neon Postgres** (free tier **persistente** — não usar o Postgres do próprio
     Render, que é apagado em ~30 dias). Cada app = um database no mesmo projeto Neon.
   - **Arquivos** → **SharePoint/Graph** (já implementado; M365 da empresa).
