@@ -1,0 +1,126 @@
+// ----------------------------------------------------------------------------
+// JustTrain — Treinamentos. Guarda só as TRANSAÇÕES (turmas, presença assinada,
+// certificados); os cadastros (colaborador, empresa) vêm do JustCore e entram como
+// SNAPSHOT no momento do registro (valor jurídico do termo de presença/certificado).
+// Convenções do Core: UUID string, snake_case via @@map, DateTime do Prisma. Ver
+// skills banco-dados e sst-epi (assinatura por digital reaproveita o fluxo do EPI).
+// ----------------------------------------------------------------------------
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+/// Catálogo de treinamentos (o "tipo": NR-35, Integração, Brigada…). Define carga
+/// horária, validade (reciclagem) e o setor dono — usado no certificado.
+model Treinamento {
+  id             String   @id @default(uuid())
+  nome           String
+  codigo         String?  @unique // slug estável: nr35_altura | integracao_f1 | it_alvenaria ...
+  tipo           String   @default("procedimento") // nr | integracao | qualidade | sistema | procedimento | it
+  setor          String   @default("sst") // taxonomia do GED: sst | rh | qualidade | ...
+  carga_horaria  Int      @default(0) // horas
+  validade_meses Int? // null = não recicla; senão gera vencimento do certificado (reciclagem)
+  descricao      String?
+  ativo          Boolean  @default(true)
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  turmas Turma[]
+
+  @@map("treinamentos")
+}
+
+/// Matriz cargo × treinamento (do Manual de Cargos e Funções): quais treinamentos cada
+/// FUNÇÃO exige. Liga `cargo` (texto, = Cargo.nome do Core) ao `treinamento_codigo` do
+/// catálogo. `condicional` = "se aplicável" / "caso necessário" do Manual. Base do painel
+/// de conformidade por colaborador (em dia | pendente | vencido). Ver skill ged/coachdesempenho.
+model RequisitoTreinamento {
+  id                 String   @id @default(uuid())
+  cargo              String // = Cargo.nome no Core (ex.: "Pedreiro", "Engenheiro Civil")
+  treinamento_codigo String // referencia Treinamento.codigo
+  treinamento_nome   String // snapshot p/ exibir mesmo sem o catálogo
+  condicional        Boolean  @default(false) // "se aplicável" — exigido só em certas obras/funções
+  created_at         DateTime @default(now())
+  updated_at         DateTime @updatedAt
+
+  @@unique([cargo, treinamento_codigo])
+  @@index([cargo])
+  @@map("requisitos_treinamento")
+}
+
+/// Uma realização do treinamento (turma). Snapshot do treinamento na hora.
+model Turma {
+  id                String   @id @default(uuid())
+  treinamento_id    String
+  treinamento_nome  String // snapshot
+  treinamento_codigo String?
+  tipo              String? // snapshot do tipo do treinamento (nr | it | ...)
+  setor             String   @default("sst") // snapshot
+  carga_horaria     Int      @default(0) // snapshot
+  validade_meses    Int? // snapshot
+  data              String // YYYY-MM-DD (realização)
+  instrutor         String?
+  local             String?
+  origem            String   @default("interna") // interna | externa
+  entidade_externa  String?  // nome da entidade que ministrou (ex.: SECONCI, SENAI, Bombeiros)
+  // cabeçalho do Formulário de Treinamento (PGR_FORMULÁRIO DE TREINAMENTO)
+  objetivo          String?
+  acao              String?
+  status            String   @default("aberta") // aberta | concluida | cancelada
+  observacao        String?
+  // Avaliação da eficácia do treinamento (Formulário pg.2, após 30 dias) — requisito PBQP-H
+  eficacia_avaliar_em    String? // YYYY-MM-DD (data + 30 dias)
+  eficacia_em            String? // ISO — quando foi avaliada
+  eficacia_proc_seguidos Boolean? // procedimentos/processos seguidos pelos participantes?
+  eficacia_houve_nc      Boolean? // houve NC/retrabalho relacionado ao tema?
+  eficacia_eficaz        Boolean? // o treinamento foi eficaz? (senão -> refazer/análise de causa)
+  eficacia_obs           String?
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+
+  treinamento   Treinamento    @relation(fields: [treinamento_id], references: [id], onDelete: Restrict)
+  participacoes Participacao[]
+
+  @@index([treinamento_id])
+  @@index([data])
+  @@map("turmas")
+}
+
+/// Presença + assinatura de um colaborador numa turma. assinatura_img = base64 (canvas
+/// manuscrito OU imagem da digital, que também vira o probe biométrico). bio_* = resultado
+/// da verificação 1:1 contra o cadastro do Core. hash/hash_anterior = cadeia de prova.
+model Participacao {
+  id                    String   @id @default(uuid())
+  turma_id              String
+  colaborador_id        String? // id no Core
+  colaborador_nome      String
+  colaborador_matricula String?
+  colaborador_cargo     String?
+  empresa_nome          String?
+  presente              Boolean  @default(true)
+  assinatura_img        String? // base64 (manuscrita ou digital)
+  assinatura_tipo       String? // manuscrita | digital | simulado
+  bio_enrolled          Boolean?
+  bio_match             Boolean?
+  bio_score             Float?
+  assinado_em           String? // ISO
+  certificado_em        String? // ISO — quando o certificado foi emitido
+  certificado_valido_ate String? // YYYY-MM-DD (data + validade_meses)
+  ged_documento_id      String? // id do certificado arquivado no GED (Core)
+  certificado_externo_id String? // id do cert. externo no GED (para turmas externas)
+  hash                  String?
+  hash_anterior         String?
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+
+  turma Turma @relation(fields: [turma_id], references: [id], onDelete: Cascade)
+
+  @@unique([turma_id, colaborador_id])
+  @@index([turma_id])
+  @@index([colaborador_id])
+  @@map("participacoes")
+}

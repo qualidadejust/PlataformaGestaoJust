@@ -9,6 +9,7 @@ export interface EntidadeDef {
 export const ENTIDADES: EntidadeDef[] = [
   { tipo: "colaborador", label: "Colaborador", path: "/colaboradores", nome: (r) => r.nome },
   { tipo: "obra", label: "Obra", path: "/obras", nome: (r) => r.nome },
+  { tipo: "empresa", label: "Empresa (docs padrão/SGQ)", path: "/empresas", nome: (r) => r.nome_fantasia ?? r.razao_social },
   { tipo: "veiculo", label: "Veículo", path: "/veiculos", nome: (r) => r.identificacao ?? r.placa ?? r.id },
   { tipo: "fornecedor", label: "Fornecedor", path: "/fornecedores", nome: (r) => r.nome },
 ];

@@ -3,9 +3,24 @@ import { randomUUID } from "node:crypto";
 import multer from "multer";
 import { prisma } from "./lib/prisma.ts";
 import { getStorage, storageByDriver } from "./lib/storage/index.ts";
+import { TAXONOMIA } from "./lib/ged-taxonomia.ts";
 
 const db = prisma as any;
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 100 * 1024 * 1024 } });
+
+// O multer/busboy decodifica o `filename` do multipart como Latin-1; nomes com acento chegam
+// como mojibake (ex.: "Certidão" → "CertidÃ£o"). Reinterpreta como UTF-8 só quando isso produz
+// texto válido — preservando nomes já corretos (round-trip seguro/idempotente).
+export function fixFilename(s: string): string {
+  if (!s) return s;
+  try {
+    const reinterpreted = Buffer.from(s, "latin1").toString("utf8");
+    if (reinterpreted.includes("�")) return s; // re-decode quebrou → original já era UTF-8
+    return reinterpreted;
+  } catch {
+    return s;
+  }
+}
 
 // Remove os ponteiros internos do storage da resposta da API e decide o que expor:
 // link direto só para arquivo NÃO sensível; sensível sempre via download mediado.
@@ -38,12 +53,16 @@ function publicDoc(d: any) {
  *   DELETE /api/documentos/:id          remove do storage + banco
  */
 export function registerDocumentos(app: Express) {
+  // Vocabulário controlado do GED (eixos de classificação/navegação) — consumido pelo JustDocs.
+  app.get("/api/ged/taxonomia", (_req, res) => res.json(TAXONOMIA));
+
   app.post("/api/documentos", upload.single("file"), async (req, res) => {
     try {
       const f = (req as any).file as Express.Multer.File | undefined;
       const {
         entidade_tipo,
         entidade_id,
+        entidade_label, // rótulo legível p/ a pasta (ex.: nome do colaborador)
         categoria,
         sensivel,
         uploaded_by,
@@ -51,19 +70,45 @@ export function registerDocumentos(app: Express) {
         tipo_codigo,
         metadados,
         valido_ate,
+        natureza, // padrao | registro (default vem do tipo do catálogo)
+        setor, // eixo de navegação (default vem do tipo)
+        processo, // SGQ (doc padrão) -> metadados
+        classificacao, // SGQ (doc padrão) -> metadados
+        codigo_doc, // código PGQ (ex.: "PEO 05") -> metadados
+        revisao, // revisão do SGQ (ex.: "19") -> metadados
+        observacao, // -> metadados
         substitui_id, // id do documento que esta versão substitui (versionamento)
       } = req.body ?? {};
       if (!f) return res.status(400).json({ error: "arquivo (campo 'file') é obrigatório" });
       if (!entidade_tipo || !entidade_id || !categoria)
         return res.status(400).json({ error: "entidade_tipo, entidade_id e categoria são obrigatórios" });
+      // corrige o nome do arquivo (multipart vem em Latin-1) antes de usar/gravar
+      const nomeArquivo = fixFilename(f.originalname);
 
-      // classificação: o tipo do catálogo define defaults (sensível, retenção)
+      // classificação: o tipo do catálogo define defaults (natureza, setor, sensível, retenção)
       const tipo = tipo_codigo ? await db.tipoDocumento.findUnique({ where: { codigo: tipo_codigo } }) : null;
       const isSensivel =
         sensivel === undefined ? !!tipo?.sensivel_padrao : sensivel === true || sensivel === "true";
+      const naturezaFinal = natureza || tipo?.natureza || "registro";
+      const setorFinal = setor || tipo?.setor || null;
       let retencao = retido_ate ?? null;
       if (!retencao && tipo?.retencao_dias)
         retencao = new Date(Date.now() + tipo.retencao_dias * 86400000).toISOString();
+
+      // metadados: JSON livre + campos do SGQ (só relevantes ao doc padrão) dobrados aqui,
+      // em vez de virarem colunas que só servem a um tipo (ver skill ged-documentos).
+      let metaObj: Record<string, any> = {};
+      if (metadados) {
+        try {
+          metaObj = JSON.parse(metadados);
+        } catch {
+          metaObj = { _raw: metadados };
+        }
+      }
+      for (const [k, v] of Object.entries({ processo, classificacao, codigo_doc, revisao, observacao })) {
+        if (v !== undefined && v !== null && v !== "") metaObj[k] = v;
+      }
+      const metadadosStr = Object.keys(metaObj).length ? JSON.stringify(metaObj) : null;
 
       // versionamento: nova versão herda o grupo e incrementa; senão abre grupo novo
       let grupo_id = randomUUID();
@@ -80,8 +125,9 @@ export function registerDocumentos(app: Express) {
       const ref = await storage.put({
         entidade_tipo,
         entidade_id,
+        entidade_label: entidade_label || undefined,
         categoria,
-        nome_original: f.originalname,
+        nome_original: nomeArquivo,
         content_type: f.mimetype,
         buffer: f.buffer,
       });
@@ -94,11 +140,13 @@ export function registerDocumentos(app: Express) {
             entidade_id,
             categoria,
             tipo_codigo: tipo_codigo ?? null,
-            nome_original: f.originalname,
+            natureza: naturezaFinal,
+            setor: setorFinal,
+            nome_original: nomeArquivo,
             content_type: f.mimetype,
             tamanho: ref.tamanho,
             sensivel: isSensivel,
-            metadados: metadados ?? null,
+            metadados: metadadosStr,
             grupo_id,
             versao,
             status: "vigente",
@@ -126,15 +174,15 @@ export function registerDocumentos(app: Express) {
 
   app.get("/api/documentos", async (req, res) => {
     try {
-      const { entidade_tipo, entidade_id, categoria, tipo_codigo, status, vigente } = req.query as Record<
-        string,
-        string | undefined
-      >;
+      const { entidade_tipo, entidade_id, categoria, tipo_codigo, status, vigente, natureza, setor } =
+        req.query as Record<string, string | undefined>;
       const where: Record<string, string> = {};
       if (entidade_tipo) where.entidade_tipo = entidade_tipo;
       if (entidade_id) where.entidade_id = entidade_id;
       if (categoria) where.categoria = categoria;
       if (tipo_codigo) where.tipo_codigo = tipo_codigo;
+      if (natureza) where.natureza = natureza;
+      if (setor) where.setor = setor;
       if (status) where.status = status;
       if (vigente === "true") where.status = "vigente"; // atalho: só a versão atual
       const rows = await db.documento.findMany({ where, orderBy: { created_at: "desc" } });

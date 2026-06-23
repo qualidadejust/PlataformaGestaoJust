@@ -16,12 +16,14 @@ transações** e referencia os IDs do Core (com snapshot dos dados na hora da tr
 
 | App | Pasta | Front | Back | Papel |
 |---|---|---|---|---|
+| **JustHub** | `JustHub/` | 4500 | — | **Portal**: tela única com cards de todos os módulos (status no ar/offline via `/api/health`) — ponto de entrada da plataforma. Front-only, sem DB. |
 | **JustCore** | `JustCore/` | 4101 | 4100 | Dados-mestre (empresas, obras, colaboradores, cargos, setores, fornecedores, insumos/EPIs, indicadores, **biometria/templates**). Fonte única. |
 | **JustEleva** | `JustEleva/app/` | 3000 | 3001 | Gestão de desempenho: avaliações por competência, PDI, feedback, movimentação, calibração, pesquisa de clima, indicadores. |
 | **JustSecurity** | `JustSecurity/` | 4000 | 4001 | Segurança do Trabalho: entrega de EPI assinada por **digital (HID U.are.U 4500)**, fichas de EPI, inspeção/troca/baixa, relatórios. |
+| **JustTrain** | `JustTrain/` | 4601 | 4600 | **Treinamentos**: catálogo (tipo NR/integração/IT/sistema; setor/carga/validade) → turmas **internas** (presença assinada: canvas ou digital HID 4500, verificação 1:1 via Core, cadeia de hash) **ou externas** (SECONCI/SENAI etc., presença `declarado` sem assinatura) → **certificado único** arquivado no **GED** do colaborador; **avaliação de eficácia 30 dias** (PBQP-H); **matriz cargo×treinamento** (conformidade: em dia/pendente/vencido); **Calendário** (turmas agendadas, eficácias pendentes, certificados vencendo nos próximos 12 meses). Snapshot do Core; biometria reaproveita o fluxo do Security. |
 | **JustGate** | `JustGate/` | — | 4200 | Gateway **WhatsApp (Meta Cloud API)**: recebe mensagem, identifica o remetente no Core (pelo telefone) e roteia para o módulo. Sem cadastro próprio. |
 | **JustFrota** | `JustFrota/` | 4301 | 4300 | **Gestão de frota**: diário de bordo (viagens) + custos (abastecimento/manutenção/fixos) + **rateio por km** entre as obras. Guarda só transações; veículo/motorista/obra vêm do Core. |
-| **JustDocs** | `JustDocs/` | 4400 | — | **GED** (gestão eletrônica de documentos): UI para enviar/consultar/versionar documentos e ver vencimentos. **Sem back/DB próprio** — consome a API do Core (proxy `/api`→4100); arquivos no SharePoint. |
+| **JustDocs** | `JustDocs/` | 4400 | — | **GED** (gestão eletrônica de documentos): UI com 3 abas — **Pastas** (navegação tipo SharePoint: SGQ/Obras/Pessoas/Empresa), **Documentos** (enviar/consultar/versionar) e **Vencimentos**. **Sem back/DB próprio** — consome a API do Core (proxy `/api`→4100); arquivos no SharePoint. |
 | **Biometria (.NET)** | `JustSecurity/biometria/` | — | 4002 | Serviço **SourceAFIS** (.NET) que faz o **match 1:N** das digitais. Consumido por Core e Security via HTTP. |
 
 > **Suba o JustCore primeiro** — os demais dependem dele para os cadastros.
@@ -30,10 +32,13 @@ transações** e referencia os IDs do Core (com snapshot dos dados na hora da tr
 JustCore (4100)  ──►  dados-mestre (SQLite + Prisma)  ◄── BiometriaDigital (templates)
    ▲     ▲     ▲
    │     │     └── JustSecurity (4001) — entregas de EPI, fichas    ──► Biometria .NET (4002) /match
+   │     │     └── JustTrain (4600)    — treinamentos: presença assinada ──► Biometria .NET (4002)
    │     └──────── JustEleva (3001)    — avaliações de desempenho
    ├────────────── JustGate (4200)     — WhatsApp: identifica remetente e roteia
    ├────────────── JustFrota (4300)    — frota: viagens + rateio por km entre obras
    └────────────── JustDocs (4400)     — GED: UI de documentos (consome a API do Core)
+JustHub (4500) — portal: cards de todos os módulos (entrada única, sem DB)
+JustTrain → gera o PDF do certificado (jsPDF, no front) e o arquiva no GED do Core (POST /api/documentos, tipo certificado_treinamento)
 WhatsApp (Meta Cloud API) ──► JustGate (4200) ──► identifica no Core ──► módulo certo
 Biometria .NET (4002) ◄── Core e Security mandam probe+candidates; devolve bestScore/bestIndex
 ```
@@ -65,8 +70,17 @@ Biometria .NET (4002) ◄── Core e Security mandam probe+candidates; devolve
     (`entidade_tipo`+`entidade_id`, sem FK). É o **GED** da plataforma: classificação
     (`tipo_codigo`→`TipoDocumento`), `metadados` (JSON), versionamento (`grupo_id`/`versao`/
     `status`), validade (`valido_ate`) e flag `sensivel` (download mediado × link). Ver seção 12.
-  - `TipoDocumento` = catálogo controlado de tipos (ASO, projeto, alvará…); define defaults
-    de comportamento (sensível, versionável, vence, retenção, obrigatório) por `entidade_tipo`.
+    Dois eixos universais de navegação são **colunas** (indexadas): **`natureza`**
+    (`padrao` = modelo/SGQ controlado × `registro` = evidência preenchida — separação ISO 9001/
+    PBQP-H cl. 7.5) e **`setor`** (qualidade | engenharia | rh | sst | suprimentos | …). Os
+    demais campos do SGQ que só servem ao doc padrão (`processo`, `classificacao`, `codigo_doc`,
+    `revisao`) ficam no JSON `metadados` (não incham a tabela). Docs padrão são globais:
+    `entidade_tipo=empresa`.
+  - `TipoDocumento` = catálogo controlado de tipos (ASO, projeto, alvará, IT, formulário…);
+    define defaults de comportamento (`natureza`, `setor`, sensível, versionável, vence,
+    retenção, obrigatório) por `entidade_tipo`. Seed (51 tipos derivados da PGQ-Lista Mestra e
+    do Mapa de Controle de Registros) em `prisma/import-tipos-documento.ts`. Vocabulário
+    controlado (setores/processos/classificações) em `server/lib/ged-taxonomia.ts`.
   - `Obra` tem `cost_center` (centro de custo), empresa, status.
   - `Insumo` = catálogo de EPIs (com C.A.), materiais, ferramentas, equipamentos.
   - `Alocacao` = colaborador × obra × período (papel, principal, responsável).
@@ -77,9 +91,12 @@ Biometria .NET (4002) ◄── Core e Security mandam probe+candidates; devolve
   `/api/biometria/...` (templates do colaborador).
 - `server/lib/biometria.ts` — `extractTemplate`, fala com o serviço .NET (4002).
 - `server/documentos.ts` — **GED**: rotas `/api/documentos` (upload multipart via **multer**
-  com `tipo_codigo`/`metadados`/`valido_ate`/`substitui_id`; lista com filtros
-  `?tipo_codigo=&status=&vigente=true`; `/:id`; `/:id/versoes`; **`/:id/download` mediado**;
-  delete). `/api/tipos-documento` = CRUD do catálogo. `server/lib/storage/` — abstração de
+  com `tipo_codigo`/`natureza`/`setor`/`processo`/`classificacao`/`codigo_doc`/`revisao`/
+  `metadados`/`valido_ate`/`substitui_id`; lista com filtros
+  `?tipo_codigo=&natureza=&setor=&status=&vigente=true`; `/:id`; `/:id/versoes`;
+  **`/:id/download` mediado**; delete). `/api/ged/taxonomia` = vocabulário controlado
+  (natureza/setor/processo/classificação). `/api/tipos-documento` = CRUD do catálogo.
+  `server/lib/storage/` — abstração de
   storage: `LocalDiskStorage` (dev, pasta `storage/`) e `SharePointStorage` (Graph),
   escolhidos por `STORAGE_DRIVER`. Ver seção 12.
 - UI admin (`src/`): tela única dirigida por **`src/entities.tsx`** (metadados de cada
@@ -247,8 +264,11 @@ M365** que a empresa já paga.
 
 O GED é genérico e do Core: qualquer app anexa/consulta documento de colaborador, obra,
 projeto, etc. por uma só API. A **UI do GED é o app `JustDocs` (4400)** — front-only que
-consome `/api/documentos`, `/api/tipos-documento` e os cadastros do Core (telas: Documentos
-com upload/versão/download e Vencimentos). Catálogo de tipos semeado por
+consome `/api/documentos`, `/api/ged/taxonomia`, `/api/tipos-documento` e os cadastros do Core.
+Telas: **Pastas** (`PastasView` — navegação tipo SharePoint com breadcrumb, derivada da
+taxonomia: 4 raízes **SGQ** [docs padrão por processo→classificação], **Obras** [por obra→setor],
+**Pessoas** [por colaborador] e **Empresa** [setores globais] — a "pasta" é visão, não caminho),
+**Documentos** (upload/versão/download) e **Vencimentos**. Catálogo de tipos semeado por
 `JustCore/prisma/import-tipos-documento.ts` e editável na tela do Core. Evolução prevista
 (ver skill `ged-documentos`): acesso por perfil + trilha de auditoria (depende de auth no
 Core), alerta de vencimento (via JustGate/WhatsApp), busca full-text (Graph).

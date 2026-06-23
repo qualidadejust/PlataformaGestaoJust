@@ -276,9 +276,11 @@ model TipoDocumento {
   id              String   @id @default(uuid())
   codigo          String   @unique // slug estável: aso | projeto_arq | alvara | contrato ...
   nome            String // rótulo: "ASO", "Projeto Arquitetônico", "Alvará de Construção"
-  entidade_tipo   String // a qual entidade se aplica: colaborador | obra | ...
+  entidade_tipo   String // a qual entidade se aplica: colaborador | obra | empresa | ...
+  natureza        String   @default("registro") // padrao (modelo/SGQ controlado) | registro (evidência preenchida)
+  setor           String? // setor/processo dono do tipo: qualidade | engenharia | rh | sst | ...
   sensivel_padrao Boolean  @default(false) // saúde/biometria/bancário (LGPD)
-  versionavel     Boolean  @default(false) // controla revisões (ex.: projetos)
+  versionavel     Boolean  @default(false) // controla revisões (ex.: projetos, docs padrão do SGQ)
   vence           Boolean  @default(false) // tem validade (ASO, licença, alvará)
   retencao_dias   Int? // prazo de guarda padrão (LGPD)
   obrigatorio     Boolean  @default(false) // exigido para a entidade (checklist documental)
@@ -296,10 +298,14 @@ model TipoDocumento {
 /// sem FK, para servir a vários módulos. Ver docs/integracao-sharepoint.md e seção 10 do resumo.
 model Documento {
   id             String   @id @default(uuid())
-  entidade_tipo  String // colaborador | obra | treinamento | entrega_epi | fvs | ...
-  entidade_id    String // id do cadastro/transação relacionado
+  entidade_tipo  String // colaborador | obra | empresa | treinamento | entrega_epi | fvs | ...
+  entidade_id    String // id do cadastro/transação relacionado (empresa.id p/ docs padrão globais)
   categoria      String // bucket grosso: aso | projeto | foto | termo_epi | ...
   tipo_codigo    String? // referencia TipoDocumento.codigo (classificação do GED)
+  // eixos universais de navegação (os demais campos do SGQ — processo/classificacao/codigo/
+  // revisao — ficam no JSON `metadados`, pois só servem ao doc padrão).
+  natureza       String   @default("registro") // padrao (modelo/SGQ controlado) | registro (evidência)
+  setor          String? // qualidade | engenharia | rh | sst | suprimentos | comercial | projetos | ...
   nome_original  String
   content_type   String?
   tamanho        Int      @default(0)
@@ -325,5 +331,7 @@ model Documento {
   @@index([categoria])
   @@index([grupo_id])
   @@index([tipo_codigo])
+  @@index([natureza])
+  @@index([setor])
   @@map("documentos")
 }

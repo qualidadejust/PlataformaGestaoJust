@@ -1,14 +1,16 @@
 import { useState } from "react";
-import { FolderOpen, FileText, CalendarClock } from "lucide-react";
+import { FolderOpen, FileText, CalendarClock, FolderTree } from "lucide-react";
 import { cn } from "./lib/cn.ts";
+import PastasView from "./views/PastasView.tsx";
 import DocumentosView from "./views/DocumentosView.tsx";
 import VencimentosView from "./views/VencimentosView.tsx";
 
-type Tab = "documentos" | "vencimentos";
+type Tab = "pastas" | "documentos" | "vencimentos";
 
 export default function App() {
-  const [tab, setTab] = useState<Tab>("documentos");
+  const [tab, setTab] = useState<Tab>("pastas");
   const tabs: { id: Tab; label: string; icon: typeof FileText }[] = [
+    { id: "pastas", label: "Pastas", icon: FolderTree },
     { id: "documentos", label: "Documentos", icon: FolderOpen },
     { id: "vencimentos", label: "Vencimentos", icon: CalendarClock },
   ];
@@ -41,6 +43,7 @@ export default function App() {
         </nav>
       </header>
       <main className="mx-auto max-w-6xl px-5 py-6">
+        {tab === "pastas" && <PastasView />}
         {tab === "documentos" && <DocumentosView />}
         {tab === "vencimentos" && <VencimentosView />}
       </main>
