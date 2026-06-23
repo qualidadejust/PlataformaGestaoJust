@@ -56,6 +56,12 @@ services:
         sync: false
       - key: MATCH_THRESHOLD
         value: "40"
+      # CADEADO PROVISÓRIO (Basic Auth) — fecha o acesso público enquanto o auth por perfil
+      # (JWT no Core) não entra. Definir os dois no painel ativa o cadeado. Remover ao migrar p/ JWT.
+      - key: GATEWAY_USER
+        sync: false
+      - key: GATEWAY_PASS
+        sync: false
 
   # ----------------------------------------------------------------------------
   # Fase 3b — fronts (Vite estáticos). Cada um é um static site (grátis, sem spin-down).

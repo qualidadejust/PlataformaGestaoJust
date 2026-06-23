@@ -113,6 +113,25 @@ app.get(["/", "/health"], (_req, res) => {
   });
 });
 
+// CADEADO PROVISÓRIO (Basic Auth) — fecha o acesso público enquanto o auth por perfil (JWT no
+// Core) não está pronto. Ativo só se GATEWAY_USER/GATEWAY_PASS estiverem setados. /health fica
+// livre (health check do Render). SUBSTITUIR pela validação de JWT quando o login do Core entrar.
+const GW_USER = process.env.GATEWAY_USER;
+const GW_PASS = process.env.GATEWAY_PASS;
+if (GW_USER && GW_PASS) {
+  app.use((req, res, next) => {
+    const h = req.headers.authorization ?? "";
+    const [scheme, b64] = h.split(" ");
+    if (scheme === "Basic" && b64) {
+      const [u, p] = Buffer.from(b64, "base64").toString().split(":");
+      if (u === GW_USER && p === GW_PASS) return next();
+    }
+    res.set("WWW-Authenticate", 'Basic realm="Plataforma JUST"');
+    return res.status(401).send("Autenticação necessária");
+  });
+  console.log("Cadeado Basic Auth ATIVO no gateway.");
+}
+
 for (const b of BACKENDS) {
   const proxy = createProxyMiddleware({
     target: `http://127.0.0.1:${b.port}`,
