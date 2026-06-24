@@ -7,14 +7,21 @@
 //   VITE_URL_<KEY>    = URL do static site de cada front (ex.: VITE_URL_CORE)
 // Sem esses env (dev), cai nos defaults localhost abaixo.
 const env = (import.meta as any).env ?? {};
-const GW: string | undefined = env.VITE_GATEWAY;
+
+/** Normaliza um host vindo do Render: `fromService property: host` às vezes traz só o NOME do
+ *  serviço (ex.: "just-gateway"), sem domínio. Tira protocolo/barra e completa `.onrender.com`. */
+const normHost = (h: string): string => {
+  const limpo = h.replace(/^https?:\/\//, "").replace(/\/+$/, "");
+  return limpo.includes(".") ? limpo : `${limpo}.onrender.com`;
+};
+const GW: string | undefined = env.VITE_GATEWAY ? normHost(env.VITE_GATEWAY) : undefined;
 
 /** URL do front: usa VITE_URL_<KEY> em produção (aceita host sem esquema, via fromService),
  *  senão o default de dev. */
 const frontUrl = (key: string, devUrl: string): string => {
   const v: string | undefined = env[`VITE_URL_${key.toUpperCase()}`];
   if (!v) return devUrl;
-  return v.startsWith("http") ? v : `https://${v}`;
+  return v.startsWith("http") ? v : `https://${normHost(v)}`;
 };
 /** healthUrl: via gateway em produção (prefixo do backend), senão o default de dev. */
 const health = (prefix: string, devUrl: string, path = "/api/health"): string =>

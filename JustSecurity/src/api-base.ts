@@ -4,7 +4,13 @@
 // 2) AUTH: injeta `Authorization: Bearer <token>` (do localStorage) em toda chamada /api e /core,
 //    exceto o próprio login; e em resposta 401 limpa o token e volta pro login.
 const env = (import.meta as any).env ?? {};
-const gw: string | undefined = env.VITE_GATEWAY;
+let gw: string | undefined = env.VITE_GATEWAY;
+// Render às vezes injeta `fromService property: host` só com o NOME do serviço (ex.: "just-gateway"),
+// sem o domínio. Normaliza: tira protocolo/barra final e completa `.onrender.com` quando vier sem ponto.
+if (gw) {
+  gw = gw.replace(/^https?:\/\//, "").replace(/\/+$/, "");
+  if (!gw.includes(".")) gw = `${gw}.onrender.com`;
+}
 const apiPrefix: string = env.VITE_API_PREFIX ?? "";
 const API_BASE = gw ? `https://${gw}${apiPrefix}` : "";
 const CORE_BASE = gw ? `https://${gw}` : "";
