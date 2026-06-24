@@ -103,6 +103,7 @@ model Colaborador {
   empresa    Empresa?           @relation(fields: [empresa_id], references: [id], onDelete: SetNull)
   alocacoes  Alocacao[]
   biometrias BiometriaDigital[]
+  usuarios   Usuario[]
 
   @@index([cargo_id])
   @@index([empresa_id])
@@ -334,4 +335,100 @@ model Documento {
   @@index([natureza])
   @@index([setor])
   @@map("documentos")
+}
+
+/// ----------------------------------------------------------------------------
+/// CONTROLE DE ACESSO (auth centralizado no Core). Ver skill `controle-acesso`.
+/// Usuario aponta para o Colaborador (quem é a pessoa). Senha em bcrypt (nunca em claro).
+/// Autorização por perfil (RBAC): Perfil tem Permissoes (chave `modulo.recurso.acao`).
+/// LogAcesso = trilha de auditoria append-only (LGPD).
+/// ----------------------------------------------------------------------------
+model Usuario {
+  id               String    @id @default(uuid())
+  email            String    @unique // login
+  senha_hash       String // bcrypt (custo >= 12). NUNCA a senha em claro.
+  colaborador_id   String? // quem é a pessoa (nome/cargo vêm do cadastro)
+  ativo            Boolean   @default(true)
+  senha_temporaria Boolean   @default(true) // força troca no 1º acesso
+  ultimo_login     DateTime?
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
+
+  colaborador Colaborador?    @relation(fields: [colaborador_id], references: [id], onDelete: SetNull)
+  perfis      UsuarioPerfil[]
+  logs        LogAcesso[]
+
+  @@index([colaborador_id])
+  @@map("usuarios")
+}
+
+model Perfil {
+  id         String   @id @default(uuid())
+  nome       String   @unique // admin | rh | sst | qualidade | gestor_obra | leitura ...
+  descricao  String?
+  ativo      Boolean  @default(true)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  usuarios    UsuarioPerfil[]
+  permissoes  PerfilPermissao[]
+
+  @@map("perfis")
+}
+
+model Permissao {
+  id        String   @id @default(uuid())
+  chave     String   @unique // `modulo.recurso.acao` ex.: core.colaborador.read, ged.sensivel.read
+  descricao String?
+  created_at DateTime @default(now())
+
+  perfis PerfilPermissao[]
+
+  @@map("permissoes")
+}
+
+model UsuarioPerfil {
+  id         String   @id @default(uuid())
+  usuario_id String
+  perfil_id  String
+  created_at DateTime @default(now())
+
+  usuario Usuario @relation(fields: [usuario_id], references: [id], onDelete: Cascade)
+  perfil  Perfil  @relation(fields: [perfil_id], references: [id], onDelete: Cascade)
+
+  @@unique([usuario_id, perfil_id])
+  @@index([perfil_id])
+  @@map("usuario_perfis")
+}
+
+model PerfilPermissao {
+  id           String   @id @default(uuid())
+  perfil_id    String
+  permissao_id String
+  created_at   DateTime @default(now())
+
+  perfil    Perfil    @relation(fields: [perfil_id], references: [id], onDelete: Cascade)
+  permissao Permissao @relation(fields: [permissao_id], references: [id], onDelete: Cascade)
+
+  @@unique([perfil_id, permissao_id])
+  @@index([permissao_id])
+  @@map("perfil_permissoes")
+}
+
+/// Trilha de auditoria de acesso (append-only). Não guardar senha/token aqui.
+model LogAcesso {
+  id          String   @id @default(uuid())
+  usuario_id  String? // nulo em tentativa de login com email inexistente
+  acao        String // login | login_falha | acesso_sensivel | logout ...
+  recurso     String? // ex.: ged.documento, core.colaborador
+  entidade_id String? // id do recurso acessado (quando aplicável)
+  ip          String?
+  sucesso     Boolean  @default(true)
+  created_at  DateTime @default(now())
+
+  usuario Usuario? @relation(fields: [usuario_id], references: [id], onDelete: SetNull)
+
+  @@index([usuario_id])
+  @@index([created_at])
+  @@map("logs_acesso")
 }
