@@ -4,6 +4,7 @@ import cors from "cors";
 import { prisma } from "./lib/prisma.ts";
 import { extractTemplate, biometriaOnline } from "./lib/biometria.ts";
 import { registerDocumentos } from "./documentos.ts";
+import { registerAuth } from "./auth.ts";
 
 const app = express();
 app.use(cors());
@@ -90,6 +91,11 @@ function registerCrud(path: string, model: string, opts: CrudOpts = {}) {
 }
 
 app.get("/api/health", (_req, res) => res.json({ ok: true, service: "just-core" }));
+
+// ---- Autenticação (login/me/trocar-senha). Ver skill `controle-acesso`. ----
+// Obs.: a obrigatoriedade de auth nas rotas de dados entra na etapa de enforcement (Fase D),
+// junto com a tela de login dos fronts — para não travar o acesso antes do login existir.
+registerAuth(app);
 
 registerCrud("empresas", "empresa", { orderBy: { razao_social: "asc" } });
 registerCrud("cargos", "cargo", { orderBy: { nome: "asc" } });
