@@ -7,6 +7,7 @@ import {
   FolderTree,
   Truck,
   MessageCircle,
+  Stethoscope,
   ExternalLink,
   type LucideIcon,
 } from "lucide-react";
@@ -21,6 +22,7 @@ const ICONS: Record<string, LucideIcon> = {
   FolderTree,
   Truck,
   MessageCircle,
+  Stethoscope,
 };
 
 // Indicador de status: pinga o /api/health (CORS habilitado) com timeout curto.

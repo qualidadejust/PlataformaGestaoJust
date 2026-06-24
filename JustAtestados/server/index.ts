@@ -146,6 +146,33 @@ app.put("/api/atestados/:id", requirePerm("atestados.write"), async (req, res) =
   }
 });
 
+// ---- Anexo (novo arquivo no reenvio) → GED do Core, sensível ----
+app.post("/api/atestados/:id/anexo", requirePerm("atestados.write"), upload.single("file"), async (req, res) => {
+  try {
+    const f = (req as any).file as Express.Multer.File | undefined;
+    if (!f) return res.status(400).json({ error: "arquivo (campo 'file') é obrigatório" });
+    const row = await db.atestado.findUnique({ where: { id: req.params.id } });
+    if (!row) return res.status(404).json({ error: "não encontrado" });
+    if (!row.colaborador_id) return res.status(400).json({ error: "atestado sem colaborador para arquivar o anexo" });
+    const ged = await gedUpload({
+      buffer: f.buffer,
+      filename: f.originalname,
+      contentType: f.mimetype,
+      colaborador_id: row.colaborador_id,
+      colaborador_nome: row.colaborador_nome ?? undefined,
+      categoria: row.tipo === "declaracao" ? "declaracao" : "atestado",
+    });
+    if (!ged) return res.status(502).json({ error: "falha ao arquivar o anexo no GED" });
+    const upd = await db.atestado.update({
+      where: { id: row.id },
+      data: { ged_documento_id: ged.id, anexo_nome: ged.nome },
+    });
+    res.json(upd);
+  } catch (e) {
+    res.status(400).json({ error: String((e as Error).message) });
+  }
+});
+
 // ---- Decisão do RH (aprovar / reprovar) ----
 app.post("/api/atestados/:id/aprovar", requirePerm("atestados.aprovar"), async (req, res) => {
   try {
@@ -212,6 +239,17 @@ app.get("/api/kpis", requirePerm("atestados.read"), async (req, res) => {
 app.get("/api/eventos", requirePerm("atestados.read"), async (req, res) => {
   const limite = Math.min(Number(req.query.limite) || 100, 500);
   res.json(await db.eventoAtestado.findMany({ orderBy: { created_at: "desc" }, take: limite }));
+});
+
+app.post("/api/eventos", requirePerm("atestados.read"), async (req, res) => {
+  try {
+    const { usuario, acao, modulo, detalhe } = req.body ?? {};
+    if (!acao) return res.status(400).json({ error: "acao é obrigatória" });
+    await db.eventoAtestado.create({ data: { usuario: usuario ?? null, acao, modulo: modulo ?? null, detalhe: detalhe ?? null } });
+    res.status(201).json({ ok: true });
+  } catch (e) {
+    res.status(400).json({ error: String((e as Error).message) });
+  }
 });
 
 const PORT = Number(process.env.PORT ?? 4700);

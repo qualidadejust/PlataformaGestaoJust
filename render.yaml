@@ -164,6 +164,21 @@ services:
 
   - type: web
     runtime: static
+    name: just-atestados-web
+    buildCommand: npm --prefix JustAtestados install --include=dev && npm --prefix JustAtestados run build
+    staticPublishPath: JustAtestados/dist
+    envVars:
+      - key: VITE_GATEWAY
+        fromService: { name: just-gateway, type: web, property: host }
+      - key: VITE_API_PREFIX
+        value: /atestados
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+
+  - type: web
+    runtime: static
     name: just-docs-web
     buildCommand: npm --prefix JustDocs install --include=dev && npm --prefix JustDocs run build
     staticPublishPath: JustDocs/dist
@@ -196,6 +211,8 @@ services:
         fromService: { name: just-train-web, type: web, property: host }
       - key: VITE_URL_FROTA
         fromService: { name: just-frota-web, type: web, property: host }
+      - key: VITE_URL_ATESTADOS
+        fromService: { name: just-atestados-web, type: web, property: host }
       - key: VITE_URL_DOCS
         fromService: { name: just-docs-web, type: web, property: host }
     routes:

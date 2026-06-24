@@ -89,6 +89,16 @@ export const MODULOS: Modulo[] = [
     tag: "Documentos",
   },
   {
+    key: "atestados",
+    nome: "JustAtestados",
+    descricao: "Atestados e declarações: lançamento, fila de análise do RH e KPIs de absenteísmo.",
+    icon: "Stethoscope",
+    cor: "text-rose-600",
+    url: frontUrl("atestados", "http://localhost:4701"),
+    healthUrl: health("/atestados", "http://localhost:4700/api/health"),
+    tag: "RH / Saúde ocupacional",
+  },
+  {
     key: "frota",
     nome: "JustFrota",
     descricao: "Frota: diário de bordo, abastecimento/manutenção e rateio por km entre obras.",
