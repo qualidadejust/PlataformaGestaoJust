@@ -43,3 +43,28 @@ window.fetch = async (input: RequestInfo | URL, init: RequestInit = {}) => {
   }
   return res;
 };
+
+// Abre um documento do GED (download MEDIADO pelo back). Não dá pra usar <a href> direto: a
+// navegação não passa pelo interceptor (host errado em produção) nem manda o token (gateway com
+// auth daria 401). Aqui fazemos fetch autenticado → blob → abre numa nova aba.
+export async function abrirDoc(downloadUrl: string): Promise<void> {
+  try {
+    const r = await fetch(downloadUrl); // o window.fetch acima injeta o Bearer e reescreve o host
+    if (!r.ok) {
+      alert(`Não foi possível abrir o documento (erro ${r.status}).`);
+      return;
+    }
+    const blob = await r.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = objectUrl;
+    a.target = "_blank";
+    a.rel = "noreferrer";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+  } catch {
+    alert("Falha de rede ao abrir o documento.");
+  }
+}

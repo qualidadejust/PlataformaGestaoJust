@@ -13,6 +13,7 @@ import {
   Landmark,
 } from "lucide-react";
 import { api } from "../lib/api.ts";
+import { abrirDoc } from "../api-base.ts";
 import { cn } from "../lib/cn.ts";
 
 // Navegação tipo SharePoint sobre o GED: a "pasta" é uma VISÃO derivada da taxonomia
@@ -315,15 +316,14 @@ export default function PastasView() {
                         <td className="py-2 pr-2 text-xs text-slate-400">{d.valido_ate ? `vence ${d.valido_ate}` : ""}</td>
                         <td className="py-2 pr-2 text-right text-xs text-slate-400">{fmtKb(d.tamanho)}</td>
                         <td className="py-2 text-right">
-                          <a
-                            href={d.download_url}
-                            target="_blank"
-                            rel="noreferrer"
+                          <button
+                            onClick={() => abrirDoc(d.download_url)}
+                            type="button"
                             title="Abrir/baixar"
                             className="text-slate-400 hover:text-teal-600"
                           >
                             <Download className="size-4" />
-                          </a>
+                          </button>
                         </td>
                       </tr>
                     ))}
