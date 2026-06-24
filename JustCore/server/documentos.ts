@@ -1,7 +1,8 @@
-import type { Express } from "express";
+import type { Express, RequestHandler } from "express";
 import { randomUUID } from "node:crypto";
 import multer from "multer";
 import { prisma } from "./lib/prisma.ts";
+import { logAcesso, type TokenPayload } from "./lib/auth.ts";
 import { getStorage, storageByDriver } from "./lib/storage/index.ts";
 import { TAXONOMIA } from "./lib/ged-taxonomia.ts";
 
@@ -52,11 +53,15 @@ function publicDoc(d: any) {
  *   GET    /api/documentos/:id/download download MEDIADO pelo back-end
  *   DELETE /api/documentos/:id          remove do storage + banco
  */
-export function registerDocumentos(app: Express) {
-  // Vocabulário controlado do GED (eixos de classificação/navegação) — consumido pelo JustDocs.
-  app.get("/api/ged/taxonomia", (_req, res) => res.json(TAXONOMIA));
+// `perm` é injetada pelo index.ts (no-op em dev, requirePerm em produção com AUTH_ENFORCE).
+export function registerDocumentos(app: Express, perm: (chave: string) => RequestHandler) {
+  const ler = perm("ged.documento.read");
+  const escrever = perm("ged.documento.write");
 
-  app.post("/api/documentos", upload.single("file"), async (req, res) => {
+  // Vocabulário controlado do GED (eixos de classificação/navegação) — consumido pelo JustDocs.
+  app.get("/api/ged/taxonomia", ler, (_req, res) => res.json(TAXONOMIA));
+
+  app.post("/api/documentos", escrever, upload.single("file"), async (req, res) => {
     try {
       const f = (req as any).file as Express.Multer.File | undefined;
       const {
@@ -172,7 +177,7 @@ export function registerDocumentos(app: Express) {
     }
   });
 
-  app.get("/api/documentos", async (req, res) => {
+  app.get("/api/documentos", ler, async (req, res) => {
     try {
       const { entidade_tipo, entidade_id, categoria, tipo_codigo, status, vigente, natureza, setor } =
         req.query as Record<string, string | undefined>;
@@ -192,7 +197,7 @@ export function registerDocumentos(app: Express) {
     }
   });
 
-  app.get("/api/documentos/:id", async (req, res) => {
+  app.get("/api/documentos/:id", ler, async (req, res) => {
     try {
       const doc = await db.documento.findUnique({ where: { id: req.params.id } });
       if (!doc) return res.status(404).json({ error: "não encontrado" });
@@ -203,7 +208,7 @@ export function registerDocumentos(app: Express) {
   });
 
   // Todas as versões do mesmo documento lógico (mais recente primeiro).
-  app.get("/api/documentos/:id/versoes", async (req, res) => {
+  app.get("/api/documentos/:id/versoes", ler, async (req, res) => {
     try {
       const doc = await db.documento.findUnique({ where: { id: req.params.id } });
       if (!doc) return res.status(404).json({ error: "não encontrado" });
@@ -214,14 +219,30 @@ export function registerDocumentos(app: Express) {
     }
   });
 
-  app.get("/api/documentos/:id/download", async (req, res) => {
+  app.get("/api/documentos/:id/download", ler, async (req, res) => {
     try {
       const doc = await db.documento.findUnique({ where: { id: req.params.id } });
       if (!doc) return res.status(404).json({ error: "não encontrado" });
-      // TODO(auth/LGPD): se doc.sensivel, validar o perfil do solicitante e registrar o
-      // acesso (quem/quando) numa trilha de auditoria. Depende da camada de auth do Core
-      // (ainda inexistente). Por ora o acesso é apenas MEDIADO — nunca expõe a URL do
-      // storage. Ver skill `lgpd-compliance`.
+      // LGPD: documento sensível (ASO/atestado/CID) exige ged.sensivel.read e registra o acesso
+      // (quem/quando) na trilha de auditoria. Internal token (x-internal-token) tem bypass.
+      const u = (req as any).user as (TokenPayload & { internal?: boolean }) | undefined;
+      if (doc.sensivel) {
+        const liberado = !u || u.internal || u.perfis?.includes("admin") || u.perm?.includes("ged.sensivel.read");
+        if (!liberado) {
+          await logAcesso(u?.sub ?? null, "acesso_sensivel_negado", {
+            recurso: "ged.documento",
+            entidade_id: doc.id,
+            ip: (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.socket.remoteAddress || undefined,
+            sucesso: false,
+          });
+          return res.status(403).json({ error: "sem permissão para baixar documento sensível", chave: "ged.sensivel.read" });
+        }
+        await logAcesso(u?.sub ?? null, "acesso_sensivel", {
+          recurso: "ged.documento",
+          entidade_id: doc.id,
+          ip: (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.socket.remoteAddress || undefined,
+        });
+      }
       const { stream, content_type } = await storageByDriver(doc.storage_driver).get({
         drive_id: doc.sp_drive_id,
         item_id: doc.sp_item_id,
@@ -235,7 +256,7 @@ export function registerDocumentos(app: Express) {
     }
   });
 
-  app.delete("/api/documentos/:id", async (req, res) => {
+  app.delete("/api/documentos/:id", escrever, async (req, res) => {
     try {
       const doc = await db.documento.findUnique({ where: { id: req.params.id } });
       if (!doc) return res.status(404).json({ error: "não encontrado" });

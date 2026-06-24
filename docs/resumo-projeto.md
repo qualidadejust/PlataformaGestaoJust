@@ -291,6 +291,15 @@ em `JustCore/prisma/` (`import-*.ts`). Chaves/segredos nunca no front.
     `JWT_SECRET`, `INTERNAL_TOKEN` (sync:false) — `AUTH_ENFORCE=true` já no `render.yaml`; admin
     inicial `admin@just.local` (senha temporária, troca no 1º acesso). Migration + seed já aplicados
     no Neon `justcore`.
+    - **Refino de permissão por rota (`requirePerm`):** os CRUD do Core exigem `core.cadastro.read`
+      (GET) / `core.cadastro.write` (mutação); biometria → `core.cadastro.*` e os **templates**
+      (sensível) → `core.sensivel.read`; GED → `ged.documento.read/write` e o **download de doc
+      sensível** → `ged.sensivel.read` + registro na auditoria (`acesso_sensivel`/`_negado`). Em dev
+      (sem `AUTH_ENFORCE`) o gate é no-op; o `x-internal-token` (app→Core) tem bypass.
+    - **Gestão de acesso (admin):** `server/acessos.ts` expõe `/api/acessos/{usuarios,perfis,permissoes,logs}`
+      (CRUD de usuários/perfis, reset de senha→senha temporária exibida 1× ao admin, auditoria),
+      tudo sob `acesso.admin`. Tela no Core: `src/views/AcessosView.tsx` (abas Usuários/Perfis/
+      Auditoria), no menu **Segurança → Controle de acesso** (só aparece p/ quem tem `acesso.admin`).
 - **Port SQLite → PostgreSQL (concluído no código):** **toda** a plataforma usa **Prisma** com
   provider `postgresql` + adapter `@prisma/adapter-pg` (driver `pg`). Os 5 apps com dados
   (Core/Eleva/Security/Train/Frota) tiveram `provider` trocado, `prisma.config.ts`/client lendo

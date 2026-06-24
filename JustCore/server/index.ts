@@ -5,7 +5,14 @@ import { prisma } from "./lib/prisma.ts";
 import { extractTemplate, biometriaOnline } from "./lib/biometria.ts";
 import { registerDocumentos } from "./documentos.ts";
 import { registerAuth } from "./auth.ts";
-import { requireAuth } from "./lib/auth.ts";
+import { registerAcessos } from "./acessos.ts";
+import { requireAuth, requirePerm } from "./lib/auth.ts";
+
+// Refino de permissão por rota. Só vale em produção (AUTH_ENFORCE), onde a global `requireAuth`
+// já populou req.user; em dev (Core aberto) vira no-op para não travar o fluxo local.
+const ENFORCE = process.env.AUTH_ENFORCE === "true";
+const noop = (_req: any, _res: any, next: any) => next();
+const perm = (chave: string) => (ENFORCE ? requirePerm(chave) : noop);
 
 const app = express();
 app.use(cors());
@@ -32,6 +39,8 @@ function relationize(input: Record<string, any>): Record<string, any> {
 interface CrudOpts {
   include?: Record<string, unknown>;
   orderBy?: Record<string, "asc" | "desc">;
+  /** base de permissão (ex.: "core.cadastro"): GET exige `.read`, mutações exigem `.write`. */
+  perm?: string;
 }
 
 /**
@@ -43,9 +52,11 @@ interface CrudOpts {
  *   DELETE /api/<path>/:id    remove
  */
 function registerCrud(path: string, model: string, opts: CrudOpts = {}) {
-  const { include, orderBy = { created_at: "desc" } } = opts;
+  const { include, orderBy = { created_at: "desc" }, perm: base } = opts;
+  const ler = base ? perm(`${base}.read`) : noop;
+  const escrever = base ? perm(`${base}.write`) : noop;
 
-  app.get(`/api/${path}`, async (_req, res) => {
+  app.get(`/api/${path}`, ler, async (_req, res) => {
     try {
       res.json(await db[model].findMany({ include, orderBy }));
     } catch (e) {
@@ -53,7 +64,7 @@ function registerCrud(path: string, model: string, opts: CrudOpts = {}) {
     }
   });
 
-  app.get(`/api/${path}/:id`, async (req, res) => {
+  app.get(`/api/${path}/:id`, ler, async (req, res) => {
     try {
       const row = await db[model].findUnique({ where: { id: req.params.id }, include });
       if (!row) return res.status(404).json({ error: "não encontrado" });
@@ -63,7 +74,7 @@ function registerCrud(path: string, model: string, opts: CrudOpts = {}) {
     }
   });
 
-  app.post(`/api/${path}`, async (req, res) => {
+  app.post(`/api/${path}`, escrever, async (req, res) => {
     try {
       res.status(201).json(await db[model].create({ data: relationize(req.body), include }));
     } catch (e) {
@@ -71,7 +82,7 @@ function registerCrud(path: string, model: string, opts: CrudOpts = {}) {
     }
   });
 
-  app.put(`/api/${path}/:id`, async (req, res) => {
+  app.put(`/api/${path}/:id`, escrever, async (req, res) => {
     try {
       // não deixa o cliente sobrescrever chaves de controle
       const { id, created_at, updated_at, ...data } = req.body ?? {};
@@ -81,7 +92,7 @@ function registerCrud(path: string, model: string, opts: CrudOpts = {}) {
     }
   });
 
-  app.delete(`/api/${path}/:id`, async (req, res) => {
+  app.delete(`/api/${path}/:id`, escrever, async (req, res) => {
     try {
       await db[model].delete({ where: { id: req.params.id } });
       res.status(204).end();
@@ -96,6 +107,9 @@ app.get("/api/health", (_req, res) => res.json({ ok: true, service: "just-core" 
 // ---- Autenticação (login/me/trocar-senha). Ver skill `controle-acesso`. ----
 registerAuth(app);
 
+// ---- Gestão de acesso (usuários/perfis/permissões/logs) — protegida por `acesso.admin`. ----
+registerAcessos(app);
+
 // ENFORCEMENT (Fase D): com AUTH_ENFORCE=true (produção), TODA rota registrada a partir daqui
 // exige token — JWT do usuário (front) OU x-internal-token (chamadas app->Core). /api/health e
 // /api/auth/* ficam acima, públicos. Em dev (sem a flag) não enforça, p/ não travar o fluxo local.
@@ -104,23 +118,26 @@ if (process.env.AUTH_ENFORCE === "true") {
   console.log("[auth] enforcement ATIVO — rotas de dados exigem token.");
 }
 
-registerCrud("empresas", "empresa", { orderBy: { razao_social: "asc" } });
-registerCrud("cargos", "cargo", { orderBy: { nome: "asc" } });
-registerCrud("obras", "obra", { include: { empresa: true }, orderBy: { nome: "asc" } });
+// Todos os cadastros-mestre do Core compartilham a permissão `core.cadastro` (read/write).
+registerCrud("empresas", "empresa", { orderBy: { razao_social: "asc" }, perm: "core.cadastro" });
+registerCrud("cargos", "cargo", { orderBy: { nome: "asc" }, perm: "core.cadastro" });
+registerCrud("obras", "obra", { include: { empresa: true }, orderBy: { nome: "asc" }, perm: "core.cadastro" });
 registerCrud("colaboradores", "colaborador", {
   include: { cargo: true, empresa: true, alocacoes: { include: { obra: true } } },
   orderBy: { nome: "asc" },
+  perm: "core.cadastro",
 });
 registerCrud("alocacoes", "alocacao", {
   include: { colaborador: true, obra: true },
+  perm: "core.cadastro",
 });
-registerCrud("fornecedores", "fornecedor", { orderBy: { nome: "asc" } });
-registerCrud("insumos", "insumo", { include: { fornecedor: true }, orderBy: { nome: "asc" } });
-registerCrud("setores", "setor", { orderBy: { nome: "asc" } });
-registerCrud("indicadores", "indicador", { orderBy: { nome: "asc" } });
-registerCrud("tipos-documento", "tipoDocumento", { orderBy: { nome: "asc" } });
-registerCrud("veiculos", "veiculo", { include: { empresa: true }, orderBy: { identificacao: "asc" } });
-registerCrud("custos-cargo", "custoCargo", { orderBy: { cargo: "asc" } });
+registerCrud("fornecedores", "fornecedor", { orderBy: { nome: "asc" }, perm: "core.cadastro" });
+registerCrud("insumos", "insumo", { include: { fornecedor: true }, orderBy: { nome: "asc" }, perm: "core.cadastro" });
+registerCrud("setores", "setor", { orderBy: { nome: "asc" }, perm: "core.cadastro" });
+registerCrud("indicadores", "indicador", { orderBy: { nome: "asc" }, perm: "core.cadastro" });
+registerCrud("tipos-documento", "tipoDocumento", { orderBy: { nome: "asc" }, perm: "core.cadastro" });
+registerCrud("veiculos", "veiculo", { include: { empresa: true }, orderBy: { identificacao: "asc" }, perm: "core.cadastro" });
+registerCrud("custos-cargo", "custoCargo", { orderBy: { cargo: "asc" }, perm: "core.cadastro" });
 
 // ---- Biometria (cadastro de digitais do colaborador) ----
 app.get("/api/biometria/health", async (_req, res) => {
@@ -128,7 +145,7 @@ app.get("/api/biometria/health", async (_req, res) => {
 });
 
 // Resumo: colaboradores com digitais e quantas (para a tela de cadastro).
-app.get("/api/biometria/resumo", async (_req, res) => {
+app.get("/api/biometria/resumo", perm("core.cadastro.read"), async (_req, res) => {
   const rows = await db.biometriaDigital.groupBy({
     by: ["colaborador_id"],
     _count: { _all: true },
@@ -140,7 +157,7 @@ app.get("/api/biometria/resumo", async (_req, res) => {
 });
 
 // Digitais de um colaborador (sem o template — para a UI).
-app.get("/api/biometria/colaboradores/:id", async (req, res) => {
+app.get("/api/biometria/colaboradores/:id", perm("core.cadastro.read"), async (req, res) => {
   const digitais = await db.biometriaDigital.findMany({
     where: { colaborador_id: req.params.id },
     select: { id: true, dedo: true, created_at: true },
@@ -149,8 +166,9 @@ app.get("/api/biometria/colaboradores/:id", async (req, res) => {
   res.json({ colaborador_id: req.params.id, total: digitais.length, digitais });
 });
 
-// Templates de um colaborador (consumido pela verificação do JustSecurity).
-app.get("/api/biometria/colaboradores/:id/templates", async (req, res) => {
+// Templates de um colaborador (consumido pela verificação do JustSecurity via x-internal-token,
+// que tem bypass). Para humanos, é dado biométrico sensível → exige core.sensivel.read.
+app.get("/api/biometria/colaboradores/:id/templates", perm("core.sensivel.read"), async (req, res) => {
   const rows = await db.biometriaDigital.findMany({
     where: { colaborador_id: req.params.id },
     select: { template: true },
@@ -159,7 +177,7 @@ app.get("/api/biometria/colaboradores/:id/templates", async (req, res) => {
 });
 
 // Cadastra digitais de um dedo (1+ capturas) — extrai o template via matcher.
-app.post("/api/biometria/colaboradores/:id/enroll", async (req, res) => {
+app.post("/api/biometria/colaboradores/:id/enroll", perm("core.cadastro.write"), async (req, res) => {
   const { dedo, imagens } = req.body ?? {};
   if (!Array.isArray(imagens) || imagens.length === 0) {
     return res.status(400).json({ error: "imagens[] é obrigatório" });
@@ -178,13 +196,15 @@ app.post("/api/biometria/colaboradores/:id/enroll", async (req, res) => {
 });
 
 // Remove uma digital cadastrada.
-app.delete("/api/biometria/:id", async (req, res) => {
+app.delete("/api/biometria/:id", perm("core.cadastro.write"), async (req, res) => {
   await db.biometriaDigital.delete({ where: { id: req.params.id } });
   res.status(204).end();
 });
 
 // ---- Documentos (arquivos no storage: disco em dev, SharePoint em prod) ----
-registerDocumentos(app);
+// GED: leitura exige ged.documento.read; envio/remoção ged.documento.write; baixar sensível
+// (ASO/atestado/CID) exige ged.sensivel.read e é registrado na auditoria.
+registerDocumentos(app, perm);
 
 const PORT = 4100;
 app.listen(PORT, () => console.log(`JustCore (dados-mestre) rodando em http://localhost:${PORT}`));
