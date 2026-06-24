@@ -4,6 +4,7 @@ import cors from "cors";
 import { prisma } from "./lib/prisma.ts";
 import { extractTemplate, biometriaOnline } from "./lib/biometria.ts";
 import { registerDocumentos } from "./documentos.ts";
+import { registerTriagem } from "./triagem.ts";
 import { registerAuth } from "./auth.ts";
 import { registerAcessos } from "./acessos.ts";
 import { requireAuth, requirePerm } from "./lib/auth.ts";
@@ -205,6 +206,9 @@ app.delete("/api/biometria/:id", perm("core.cadastro.write"), async (req, res) =
 // GED: leitura exige ged.documento.read; envio/remoção ged.documento.write; baixar sensível
 // (ASO/atestado/CID) exige ged.sensivel.read e é registrado na auditoria.
 registerDocumentos(app, perm);
+
+// ---- Triagem por IA (Gemini): lê o arquivo e PROPÕE a classificação no GED (não grava) ----
+registerTriagem(app, perm);
 
 const PORT = 4100;
 app.listen(PORT, () => console.log(`JustCore (dados-mestre) rodando em http://localhost:${PORT}`));

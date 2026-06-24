@@ -54,6 +54,12 @@ services:
         sync: false
       - key: SP_SITE
         value: justconstrutora.sharepoint.com:/sites/PlataformaJust
+      # Triagem por IA (Gemini) — chave do Google AI Studio (AIza...). Ver server/triagem.ts.
+      # LGPD: usar projeto/tier que NÃO treina com os dados (dado sensível de RH).
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
       # Biometria (.NET no totem local) e match.
       - key: BIOMETRIA_URL
         sync: false

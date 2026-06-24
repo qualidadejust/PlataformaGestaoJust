@@ -24,7 +24,7 @@ transações** e referencia os IDs do Core (com snapshot dos dados na hora da tr
 | **JustGate** | `JustGate/` | — | 4200 | Gateway **WhatsApp (Meta Cloud API)**: recebe mensagem, identifica o remetente no Core (pelo telefone) e roteia para o módulo. Sem cadastro próprio. |
 | **JustFrota** | `JustFrota/` | 4301 | 4300 | **Gestão de frota**: diário de bordo (viagens) + custos (abastecimento/manutenção/fixos) + **rateio por km** entre as obras. Guarda só transações; veículo/motorista/obra vêm do Core. |
 | **JustAtestados** | `JustAtestados/` | 4701 | 4700 | **Atestados/declarações de comparecimento**: lançamento (apontador) → fila de análise (RH aprova/recusa) → KPIs de absenteísmo. Guarda só a transação + snapshot; colaborador/obra/cargo vêm do Core; **anexo (CID/saúde) vai pro GED do Core como sensível** (guarda só o `ged_documento_id`). Permissões `atestados.read/write/aprovar`; perfil novo `apontador`. Front adaptado do repo externo (`pridema1/atestadosJUST`): telas mantidas, camada de dados trocada por `apiDataService` (back + Core), auth/role derivado dos perfis; CID-10 como asset estático; cadastro é só-leitura do Core (criar/editar no JustCore). |
-| **JustDocs** | `JustDocs/` | 4400 | — | **GED** (gestão eletrônica de documentos): UI com 3 abas — **Pastas** (navegação tipo SharePoint: SGQ/Obras/Pessoas/Empresa), **Documentos** (enviar/consultar/versionar) e **Vencimentos**. **Sem back/DB próprio** — consome a API do Core (proxy `/api`→4100); arquivos no SharePoint. |
+| **JustDocs** | `JustDocs/` | 4400 | — | **GED** (gestão eletrônica de documentos): UI com 4 abas — **Pastas** (navegação tipo SharePoint: SGQ/Obras/Pessoas/Empresa), **Documentos** (enviar/consultar/versionar), **Triagem IA** (sobe até 2 arquivos, a IA propõe tipo/colaborador/sensível/validade, confere e envia ao GED) e **Vencimentos**. **Sem back/DB próprio** — consome a API do Core (proxy `/api`→4100); arquivos no SharePoint. |
 | **Biometria (.NET)** | `JustSecurity/biometria/` | — | 4002 | Serviço **SourceAFIS** (.NET) que faz o **match 1:N** das digitais. Consumido por Core e Security via HTTP. |
 
 > **Suba o JustCore primeiro** — os demais dependem dele para os cadastros.
@@ -103,6 +103,12 @@ Biometria .NET (4002) ◄── Core e Security mandam probe+candidates; devolve
   `?tipo_codigo=&natureza=&setor=&status=&vigente=true`; `/:id`; `/:id/versoes`;
   **`/:id/download` mediado**; delete). `/api/ged/taxonomia` = vocabulário controlado
   (natureza/setor/processo/classificação). `/api/tipos-documento` = CRUD do catálogo.
+- `server/triagem.ts` — **Triagem por IA** (MVP): `POST /api/triagem/documento` (multipart)
+  lê UM arquivo (PDF/imagem) por **visão** via **Gemini** (`server/lib/ia/gemini.ts`, REST,
+  fetch nativo, chave `GEMINI_API_KEY` só no Core) e **PROPÕE** `tipo_codigo`/`sensivel`/
+  `valido_ate`/colaborador (casado por `server/lib/match-colaborador.ts`) — **não grava**; a
+  gravação reusa `/api/documentos`. Registra `logAcesso("triagem_ia")` (LGPD: conteúdo
+  sensível é enviado ao Google — preferir tier sem treinamento). Fase seguinte: treinamentos.
   `server/lib/storage/` — abstração de
   storage: `LocalDiskStorage` (dev, pasta `storage/`) e `SharePointStorage` (Graph),
   escolhidos por `STORAGE_DRIVER`. Ver seção 12.
