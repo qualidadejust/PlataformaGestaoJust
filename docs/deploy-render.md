@@ -76,6 +76,19 @@ cd <app> && DATABASE_URL="postgresql://…@ep-xxxx.sa-east-1.aws.neon.tech/<db>?
 
 | Serviço | Variáveis |
 |---|---|
-| `just-gateway` | `DATABASE_URL_CORE/_ELEVA/_SECURITY/_TRAIN/_FROTA`, `STORAGE_DRIVER=sharepoint`, `SP_*`, `BIOMETRIA_URL`, `MATCH_THRESHOLD` |
+| `just-gateway` | `DATABASE_URL_CORE/_ELEVA/_SECURITY/_TRAIN/_FROTA`, `STORAGE_DRIVER=sharepoint`, `SP_*`, `BIOMETRIA_URL`, `MATCH_THRESHOLD`, **`JWT_SECRET`**, **`INTERNAL_TOKEN`**, `AUTH_ENFORCE=true` |
+
+## Controle de acesso (auth) — ativar em produção
+
+Auth centralizado no Core (skill `controle-acesso`). A migration e o seed (admin + perfis) já
+foram aplicados no Neon `justcore`. Para ativar o login na produção, no **just-gateway → Environment**:
+
+- `JWT_SECRET` = um segredo forte e aleatório (ex.: 32+ chars). Mesmo valor usado p/ assinar e validar.
+- `INTERNAL_TOKEN` = outro segredo (chamadas servidor↔servidor app→Core).
+- `AUTH_ENFORCE=true` já vem no `render.yaml`.
+
+Login inicial: **`admin@just.local`** / senha temporária `JustAdmin@2026` (força troca no 1º acesso).
+Para criar mais usuários/ajustar perfis, rode `npm run db:seed-acesso` (idempotente) ou gerencie via
+o Core. Reaplicar seed com `ADMIN_EMAIL`/`ADMIN_SENHA` no ambiente define o admin.
 | `just-*-web` (fronts) | `VITE_GATEWAY` (auto), `VITE_API_PREFIX` (fixo no render.yaml) |
 | `just-hub` | `VITE_GATEWAY` + `VITE_URL_*` (auto, dos outros sites) |

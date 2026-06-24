@@ -279,13 +279,18 @@ em `JustCore/prisma/` (`import-*.ts`). Chaves/segredos nunca no front.
     O totem só precisa estar ligado durante entregas/treinamentos. Passo a passo no guia abaixo.
   - **Guia de deploy completo:** `docs/deploy-render.md` (Blueprint, variáveis por serviço,
     validação, biometria via túnel, migrations com conexão direta).
-  - **Segurança/acesso (em construção):** o deploy é **público** (URLs `*.onrender.com`, CORS
-    liberado) e a plataforma **ainda não tem autenticação** — antes de operar com a base real,
-    entra o **controle de acesso** (skill `controle-acesso`): **auth centralizado no JustCore**
-    (login/senha bcrypt → **JWT** validado por cada backend; `Usuario`→`Colaborador`, perfis/RBAC,
-    `LogAcesso` p/ auditoria LGPD). O `src/api-base.ts` dos fronts será o ponto único que injeta o
-    `Authorization: Bearer`. **Cadeado provisório**: Basic Auth no gateway (`GATEWAY_USER/PASS`)
-    fecha o acesso público até o JWT entrar — depois é substituído pela validação de Bearer.
+  - **Segurança/acesso (CONSTRUÍDO — skill `controle-acesso`):** **auth centralizado no JustCore**.
+    Modelos `Usuario`(→`Colaborador`)/`Perfil`/`Permissao`/`LogAcesso` (RBAC + auditoria LGPD);
+    `server/lib/auth.ts` (bcrypt, JWT HS256, `requireAuth`/`requirePerm`, token de serviço
+    `x-internal-token` p/ chamadas app→Core) + `server/auth.ts` (`/api/auth/login|me|trocar-senha`);
+    seed `prisma/seed-acesso.ts` (15 permissões, 6 perfis, admin). **Fronts**: `src/auth.tsx`
+    (AuthProvider/useAuth) + `src/LoginGate.tsx` (login + troca de senha obrigatória) + o
+    `src/api-base.ts` injeta `Authorization: Bearer` e em 401 volta ao login. **Enforcement**: com
+    `AUTH_ENFORCE=true` o Core exige token nas rotas de dados (health/auth públicos); o **gateway**
+    valida JWT (libera OPTIONS/preflight e o login). Para ativar em produção, definir no gateway:
+    `JWT_SECRET`, `INTERNAL_TOKEN` (sync:false) — `AUTH_ENFORCE=true` já no `render.yaml`; admin
+    inicial `admin@just.local` (senha temporária, troca no 1º acesso). Migration + seed já aplicados
+    no Neon `justcore`.
 - **Port SQLite → PostgreSQL (concluído no código):** **toda** a plataforma usa **Prisma** com
   provider `postgresql` + adapter `@prisma/adapter-pg` (driver `pg`). Os 5 apps com dados
   (Core/Eleva/Security/Train/Frota) tiveram `provider` trocado, `prisma.config.ts`/client lendo
