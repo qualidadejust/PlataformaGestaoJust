@@ -122,6 +122,9 @@ if (JWT_SECRET) {
   app.use((req, res, next) => {
     if (req.method === "OPTIONS") return next();
     if (req.path.endsWith("/api/auth/login")) return next();
+    // Webhook do WhatsApp (Meta Cloud API): a Meta chama SEM Authorization. É público por
+    // natureza — protegido pelo WA_VERIFY_TOKEN (GET) e pela assinatura do payload (POST).
+    if (req.path === "/gate/webhook") return next();
     const h = (req.headers.authorization as string) ?? "";
     const [scheme, token] = h.split(" ");
     if (scheme === "Bearer" && token) {

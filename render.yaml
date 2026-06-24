@@ -66,6 +66,18 @@ services:
         sync: false
       - key: AUTH_ENFORCE
         value: "true"
+      # WHATSAPP (JustGate, rota /gate). Ver skill `justgate-whatsapp`.
+      # WA_VERIFY_TOKEN: string que você inventa; tem que bater com a do painel da Meta (webhook).
+      # WA_PHONE_NUMBER_ID: "Phone number ID" do número (NÃO é o telefone). WA_TOKEN: token do
+      # System User (permanente) em produção. Webhook: https://<gateway>/gate/webhook (campo messages).
+      - key: WA_VERIFY_TOKEN
+        sync: false
+      - key: WA_PHONE_NUMBER_ID
+        sync: false
+      - key: WA_TOKEN
+        sync: false
+      - key: WA_API_VERSION
+        value: v21.0
 
   # ----------------------------------------------------------------------------
   # Fase 3b — fronts (Vite estáticos). Cada um é um static site (grátis, sem spin-down).
