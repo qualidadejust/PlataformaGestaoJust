@@ -83,14 +83,15 @@ export default function DocumentosView() {
       fd.append("file", file);
       fd.append("entidade_tipo", entidadeTipo);
       fd.append("entidade_id", entidadeId);
+      // rótulo legível p/ a pasta no SharePoint (ex.: "emp-297 - Samuel ...").
+      // Mesma fonte de nome dos outros apps (JustTrain/JustAtestados) → pasta única, sem duplicar.
+      if (ent) fd.append("entidade_label", def.nome(ent));
       fd.append("categoria", tipoCod || "documento");
       if (tipoCod) fd.append("tipo_codigo", tipoCod);
       fd.append("sensivel", String(sensivel));
       if (validoAte) fd.append("valido_ate", validoAte);
       if (obs) fd.append("observacao", obs);
       if (substituiId) fd.append("substitui_id", substituiId);
-      // snapshot de nome da entidade — só informativo; o Core guarda os ids
-      void ent;
       return uploadDoc(fd);
     },
     onSuccess: () => {
