@@ -1,0 +1,87 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// ----------------------------------------------------------------------------
+/// JustAtestados — atestados e declarações de comparecimento (transações).
+/// Cadastro (colaborador/obra/cargo) é do JustCore; aqui guarda só a TRANSAÇÃO e o
+/// snapshot dos dados na hora. O arquivo (foto/PDF) vai pro GED do Core (sensível,
+/// pois carrega CID/saúde) — guardamos só o `ged_documento_id`. Ver skill `controle-acesso`
+/// e a seção do resumo. Permissões: atestados.read | atestados.write | atestados.aprovar.
+/// ----------------------------------------------------------------------------
+
+/// Documento de afastamento: atestado médico OU declaração de comparecimento.
+model Atestado {
+  id     String @id @default(uuid())
+  ticket String @unique // sequencial legível, ex.: "RM-1042"
+  tipo   String // atestado | declaracao
+  status String @default("pendente") // pendente | aprovado | reprovado | inconsistente
+
+  // Referência ao Core (snapshot gravado na hora — sobrevive a mudança no cadastro).
+  colaborador_id   String?
+  colaborador_nome String?
+  matricula        String?
+  cargo            String?
+  setor            String?
+  gestor           String?
+  obra_id          String?
+  obra_nome        String?
+  obra_uf          String?
+  centro_custo     String?
+
+  data_lancamento String // ISO YYYY-MM-DD
+  data_analise    String? // ISO YYYY-MM-DD em que o RH avaliou
+  analista        String? // nome de quem avaliou
+
+  // Autoria / devolução
+  apontador_id   String?
+  apontador_nome String?
+  motivo         String? // orientação do RH ao recusar (devolver p/ correção)
+
+  // Atestado médico
+  data_emissao  String?
+  dias          Int? // dias de afastamento
+  cid_codigo    String?
+  cid_descricao String?
+  medico_nome   String?
+  medico_crm    String?
+
+  // Declaração de comparecimento
+  data_comparecimento String?
+  periodo             String? // manha | tarde | integral
+  hora_inicio         String? // HH:mm
+  hora_fim            String? // HH:mm
+  horas               Float?
+  local               String?
+
+  // Anexo arquivado no GED do Core (download mediado, sensível).
+  ged_documento_id String?
+  anexo_nome       String?
+
+  origem     String   @default("manual") // manual | whatsapp
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([colaborador_id])
+  @@index([obra_id])
+  @@index([status])
+  @@index([data_lancamento])
+  @@map("atestados")
+}
+
+/// Trilha de auditoria do módulo (append-only).
+model EventoAtestado {
+  id         String   @id @default(uuid())
+  usuario    String? // nome de quem executou
+  acao       String // Lançamento | Aprovação | Recusa | ...
+  modulo     String? // tela/contexto
+  detalhe    String?
+  created_at DateTime @default(now())
+
+  @@index([created_at])
+  @@map("eventos_atestado")
+}

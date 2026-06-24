@@ -41,6 +41,7 @@ const BACKENDS: Backend[] = [
   { name: "train", dir: "JustTrain", port: 4600 },
   { name: "frota", dir: "JustFrota", port: 4300 },
   { name: "gate", dir: "JustGate", port: 4200 },
+  { name: "atestados", dir: "JustAtestados", port: 4700 },
 ];
 
 // Internamente os apps falam com o Core pela porta fixa (sem passar pelo proxy).

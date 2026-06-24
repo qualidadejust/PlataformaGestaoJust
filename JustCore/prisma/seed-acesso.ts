@@ -21,16 +21,20 @@ const PERMISSOES: [string, string][] = [
   ["frota.write", "Lançar viagens/custos da frota"],
   ["eleva.read", "Ver avaliações de desempenho"],
   ["eleva.write", "Gerenciar avaliações de desempenho"],
+  ["atestados.read", "Ver atestados/declarações"],
+  ["atestados.write", "Lançar atestado/declaração (apontador)"],
+  ["atestados.aprovar", "Aprovar/recusar atestado (RH)"],
   ["acesso.admin", "Gerenciar usuários e perfis"],
 ];
 
 // perfil -> chaves de permissão ("*" = todas)
 const PERFIS: Record<string, string[]> = {
   admin: ["*"],
-  rh: ["core.cadastro.read", "core.cadastro.write", "core.sensivel.read", "eleva.read", "eleva.write", "ged.documento.read"],
+  rh: ["core.cadastro.read", "core.cadastro.write", "core.sensivel.read", "eleva.read", "eleva.write", "ged.documento.read", "ged.sensivel.read", "atestados.read", "atestados.write", "atestados.aprovar"],
   sst: ["security.read", "security.write", "ged.documento.read", "ged.sensivel.read", "core.cadastro.read"],
   qualidade: ["ged.documento.read", "ged.documento.write", "core.cadastro.read"],
   gestor_obra: ["frota.read", "core.cadastro.read", "eleva.read", "ged.documento.read"],
+  apontador: ["atestados.read", "atestados.write", "core.cadastro.read"],
   leitura: PERMISSOES.map(([k]) => k).filter((k) => k.endsWith(".read")),
 };
 

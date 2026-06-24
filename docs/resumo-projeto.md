@@ -23,6 +23,7 @@ transações** e referencia os IDs do Core (com snapshot dos dados na hora da tr
 | **JustTrain** | `JustTrain/` | 4601 | 4600 | **Treinamentos**: catálogo (tipo NR/integração/IT/sistema; setor/carga/validade) → turmas **internas** (presença assinada: canvas ou digital HID 4500, verificação 1:1 via Core, cadeia de hash) **ou externas** (SECONCI/SENAI etc., presença `declarado` sem assinatura) → **certificado único** arquivado no **GED** do colaborador; **avaliação de eficácia 30 dias** (PBQP-H); **matriz cargo×treinamento** (conformidade: em dia/pendente/vencido); **Calendário** (turmas agendadas, eficácias pendentes, certificados vencendo nos próximos 12 meses). Snapshot do Core; biometria reaproveita o fluxo do Security. |
 | **JustGate** | `JustGate/` | — | 4200 | Gateway **WhatsApp (Meta Cloud API)**: recebe mensagem, identifica o remetente no Core (pelo telefone) e roteia para o módulo. Sem cadastro próprio. |
 | **JustFrota** | `JustFrota/` | 4301 | 4300 | **Gestão de frota**: diário de bordo (viagens) + custos (abastecimento/manutenção/fixos) + **rateio por km** entre as obras. Guarda só transações; veículo/motorista/obra vêm do Core. |
+| **JustAtestados** | `JustAtestados/` | 4701 | 4700 | **Atestados/declarações de comparecimento**: lançamento (apontador) → fila de análise (RH aprova/recusa) → KPIs de absenteísmo. Guarda só a transação + snapshot; colaborador/obra/cargo vêm do Core; **anexo (CID/saúde) vai pro GED do Core como sensível** (guarda só o `ged_documento_id`). Permissões `atestados.read/write/aprovar`; perfil novo `apontador`. |
 | **JustDocs** | `JustDocs/` | 4400 | — | **GED** (gestão eletrônica de documentos): UI com 3 abas — **Pastas** (navegação tipo SharePoint: SGQ/Obras/Pessoas/Empresa), **Documentos** (enviar/consultar/versionar) e **Vencimentos**. **Sem back/DB próprio** — consome a API do Core (proxy `/api`→4100); arquivos no SharePoint. |
 | **Biometria (.NET)** | `JustSecurity/biometria/` | — | 4002 | Serviço **SourceAFIS** (.NET) que faz o **match 1:N** das digitais. Consumido por Core e Security via HTTP. |
 
@@ -36,6 +37,7 @@ JustCore (4100)  ──►  dados-mestre (SQLite + Prisma)  ◄── BiometriaD
    │     └──────── JustEleva (3001)    — avaliações de desempenho
    ├────────────── JustGate (4200)     — WhatsApp: identifica remetente e roteia
    ├────────────── JustFrota (4300)    — frota: viagens + rateio por km entre obras
+   ├────────────── JustAtestados (4700)— atestados/declarações; anexo→GED sensível do Core
    └────────────── JustDocs (4400)     — GED: UI de documentos (consome a API do Core)
 JustHub (4500) — portal: cards de todos os módulos (entrada única, sem DB)
 JustTrain → gera o PDF do certificado (jsPDF, no front) e o arquiva no GED do Core (POST /api/documentos, tipo certificado_treinamento)

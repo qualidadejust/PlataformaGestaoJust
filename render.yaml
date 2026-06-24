@@ -24,6 +24,7 @@ services:
       npm --prefix JustSecurity install --include=dev && npm --prefix JustSecurity run db:generate &&
       npm --prefix JustTrain install --include=dev && npm --prefix JustTrain run db:generate &&
       npm --prefix JustFrota install --include=dev && npm --prefix JustFrota run db:generate &&
+      npm --prefix JustAtestados install --include=dev && npm --prefix JustAtestados run db:generate &&
       npm --prefix JustGate install --include=dev &&
       npm --prefix gateway install --include=dev
     startCommand: npm --prefix gateway start
@@ -39,6 +40,8 @@ services:
       - key: DATABASE_URL_TRAIN
         sync: false
       - key: DATABASE_URL_FROTA
+        sync: false
+      - key: DATABASE_URL_ATESTADOS
         sync: false
       # Arquivos (Core) — SharePoint / Microsoft Graph.
       - key: STORAGE_DRIVER
