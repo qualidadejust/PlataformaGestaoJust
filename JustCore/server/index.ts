@@ -5,6 +5,7 @@ import { prisma } from "./lib/prisma.ts";
 import { extractTemplate, biometriaOnline } from "./lib/biometria.ts";
 import { registerDocumentos } from "./documentos.ts";
 import { registerAuth } from "./auth.ts";
+import { requireAuth } from "./lib/auth.ts";
 
 const app = express();
 app.use(cors());
@@ -93,9 +94,15 @@ function registerCrud(path: string, model: string, opts: CrudOpts = {}) {
 app.get("/api/health", (_req, res) => res.json({ ok: true, service: "just-core" }));
 
 // ---- Autenticação (login/me/trocar-senha). Ver skill `controle-acesso`. ----
-// Obs.: a obrigatoriedade de auth nas rotas de dados entra na etapa de enforcement (Fase D),
-// junto com a tela de login dos fronts — para não travar o acesso antes do login existir.
 registerAuth(app);
+
+// ENFORCEMENT (Fase D): com AUTH_ENFORCE=true (produção), TODA rota registrada a partir daqui
+// exige token — JWT do usuário (front) OU x-internal-token (chamadas app->Core). /api/health e
+// /api/auth/* ficam acima, públicos. Em dev (sem a flag) não enforça, p/ não travar o fluxo local.
+if (process.env.AUTH_ENFORCE === "true") {
+  app.use(requireAuth);
+  console.log("[auth] enforcement ATIVO — rotas de dados exigem token.");
+}
 
 registerCrud("empresas", "empresa", { orderBy: { razao_social: "asc" } });
 registerCrud("cargos", "cargo", { orderBy: { nome: "asc" } });

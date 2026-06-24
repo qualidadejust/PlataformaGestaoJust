@@ -19,6 +19,7 @@ export async function biometriaOnline(): Promise<boolean> {
 // Templates cadastrados do colaborador (no Core).
 async function templatesDoColaborador(colaboradorId: string): Promise<string[]> {
   const r = await fetch(`${CORE_URL}/api/biometria/colaboradores/${colaboradorId}/templates`, {
+    headers: { "x-internal-token": process.env.INTERNAL_TOKEN ?? "" },
     signal: AbortSignal.timeout(3000),
   });
   if (!r.ok) throw new Error(`Core retornou ${r.status} ao buscar templates`);

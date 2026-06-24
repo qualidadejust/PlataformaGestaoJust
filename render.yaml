@@ -56,12 +56,16 @@ services:
         sync: false
       - key: MATCH_THRESHOLD
         value: "40"
-      # CADEADO PROVISÓRIO (Basic Auth) — fecha o acesso público enquanto o auth por perfil
-      # (JWT no Core) não entra. Definir os dois no painel ativa o cadeado. Remover ao migrar p/ JWT.
-      - key: GATEWAY_USER
+      # CONTROLE DE ACESSO (JWT). Ver skill `controle-acesso`.
+      # JWT_SECRET: segredo forte, MESMO valor usado pelo Core p/ assinar/validar o token.
+      # INTERNAL_TOKEN: segredo p/ chamadas servidor->servidor (apps -> Core).
+      # AUTH_ENFORCE=true liga a obrigatoriedade de token nas rotas de dados do Core.
+      - key: JWT_SECRET
         sync: false
-      - key: GATEWAY_PASS
+      - key: INTERNAL_TOKEN
         sync: false
+      - key: AUTH_ENFORCE
+        value: "true"
 
   # ----------------------------------------------------------------------------
   # Fase 3b — fronts (Vite estáticos). Cada um é um static site (grátis, sem spin-down).

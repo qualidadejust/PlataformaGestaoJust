@@ -13,6 +13,7 @@
 // lêem process.env.PORT (Eleva/Frota/Gate) recebem a porta interna explícita aqui.
 import "dotenv/config";
 import express from "express";
+import jwt from "jsonwebtoken";
 import { createProxyMiddleware } from "http-proxy-middleware";
 import { spawn } from "node:child_process";
 import net from "node:net";
@@ -113,23 +114,27 @@ app.get(["/", "/health"], (_req, res) => {
   });
 });
 
-// CADEADO PROVISÓRIO (Basic Auth) — fecha o acesso público enquanto o auth por perfil (JWT no
-// Core) não está pronto. Ativo só se GATEWAY_USER/GATEWAY_PASS estiverem setados. /health fica
-// livre (health check do Render). SUBSTITUIR pela validação de JWT quando o login do Core entrar.
-const GW_USER = process.env.GATEWAY_USER;
-const GW_PASS = process.env.GATEWAY_PASS;
-if (GW_USER && GW_PASS) {
+// VALIDAÇÃO DE JWT (defesa em profundidade). Ativa se JWT_SECRET estiver setado. O / e /health
+// são rotas registradas acima (não chegam aqui). Libera o preflight CORS (OPTIONS) e o login
+// público. Cada backend revalida o token (Core é a fronteira real). Mesmo JWT_SECRET do Core.
+const JWT_SECRET = process.env.JWT_SECRET;
+if (JWT_SECRET) {
   app.use((req, res, next) => {
-    const h = req.headers.authorization ?? "";
-    const [scheme, b64] = h.split(" ");
-    if (scheme === "Basic" && b64) {
-      const [u, p] = Buffer.from(b64, "base64").toString().split(":");
-      if (u === GW_USER && p === GW_PASS) return next();
+    if (req.method === "OPTIONS") return next();
+    if (req.path.endsWith("/api/auth/login")) return next();
+    const h = (req.headers.authorization as string) ?? "";
+    const [scheme, token] = h.split(" ");
+    if (scheme === "Bearer" && token) {
+      try {
+        jwt.verify(token, JWT_SECRET);
+        return next();
+      } catch {
+        /* cai no 401 */
+      }
     }
-    res.set("WWW-Authenticate", 'Basic realm="Plataforma JUST"');
-    return res.status(401).send("Autenticação necessária");
+    return res.status(401).json({ error: "não autenticado" });
   });
-  console.log("Cadeado Basic Auth ATIVO no gateway.");
+  console.log("Gateway: validação de JWT ATIVA.");
 }
 
 for (const b of BACKENDS) {

@@ -19,7 +19,10 @@ export async function identifyByPhone(phone: string): Promise<CoreColaborador | 
   const tail = digits(phone).slice(-8);
   if (tail.length < 8) return null;
   try {
-    const r = await fetch(`${CORE_URL}/api/colaboradores`, { signal: AbortSignal.timeout(4000) });
+    const r = await fetch(`${CORE_URL}/api/colaboradores`, {
+      headers: { "x-internal-token": process.env.INTERNAL_TOKEN ?? "" },
+      signal: AbortSignal.timeout(4000),
+    });
     if (!r.ok) return null;
     const list = (await r.json()) as CoreColaborador[];
     return list.find((c) => digits(c.telefone).slice(-8) === tail) ?? null;
