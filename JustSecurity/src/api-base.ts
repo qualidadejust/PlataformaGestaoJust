@@ -1,25 +1,39 @@
-// Interceptor de fetch para PRODUÇÃO (deploy no Render): prefixa as chamadas relativas
-// `/api/...` (backend do próprio app) e `/core/...` (JustCore) com a URL do gateway.
-// Em DEV não há VITE_GATEWAY → no-op: os caminhos relativos seguem o proxy do Vite.
-//
-// Config no build (static site do Render):
-//   VITE_GATEWAY     = host do gateway (ex.: just-gateway.onrender.com) — via fromService
-//   VITE_API_PREFIX  = prefixo do backend deste app no gateway (ex.: "/core", "/security")
+// Interceptor de fetch da Plataforma JUST. Faz duas coisas:
+// 1) PRODUÇÃO: prefixa chamadas relativas `/api` (backend do app) e `/core` (JustCore) com a URL
+//    do gateway (VITE_GATEWAY + VITE_API_PREFIX). Em dev é no-op (segue o proxy do Vite).
+// 2) AUTH: injeta `Authorization: Bearer <token>` (do localStorage) em toda chamada /api e /core,
+//    exceto o próprio login; e em resposta 401 limpa o token e volta pro login.
 const env = (import.meta as any).env ?? {};
 const gw: string | undefined = env.VITE_GATEWAY;
 const apiPrefix: string = env.VITE_API_PREFIX ?? "";
+const API_BASE = gw ? `https://${gw}${apiPrefix}` : "";
+const CORE_BASE = gw ? `https://${gw}` : "";
 
-if (gw) {
-  const base = `https://${gw}`;
-  const API_BASE = base + apiPrefix; // backend próprio do app
-  const CORE_BASE = base; // JustCore (chamadas /core/...)
-  const orig = window.fetch.bind(window);
-  window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : null;
-    if (url) {
-      if (url.startsWith("/core")) return orig(CORE_BASE + url, init);
-      if (url.startsWith("/api")) return orig(API_BASE + url, init);
-    }
-    return orig(input, init);
-  };
-}
+export const TOKEN_KEY = "just_token";
+
+const orig = window.fetch.bind(window);
+window.fetch = async (input: RequestInfo | URL, init: RequestInit = {}) => {
+  const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : null;
+  const ehApi = !!url && (url.startsWith("/api") || url.startsWith("/core"));
+  const ehLogin = !!url && url.includes("/auth/login");
+
+  if (!ehApi) return orig(input as any, init);
+
+  // injeta o token (menos no login)
+  const headers = new Headers(init.headers);
+  const token = localStorage.getItem(TOKEN_KEY);
+  if (token && !ehLogin && !headers.has("Authorization")) headers.set("Authorization", `Bearer ${token}`);
+
+  // reescreve a base em produção
+  let alvo: string = url!;
+  if (url!.startsWith("/core")) alvo = CORE_BASE + url!;
+  else if (url!.startsWith("/api")) alvo = API_BASE + url!;
+
+  const res = await orig(alvo, { ...init, headers });
+  if (res.status === 401 && !ehLogin) {
+    localStorage.removeItem(TOKEN_KEY);
+    // recarrega p/ cair no LoginGate (token expirado/inválido)
+    if (typeof window !== "undefined") window.location.reload();
+  }
+  return res;
+};
