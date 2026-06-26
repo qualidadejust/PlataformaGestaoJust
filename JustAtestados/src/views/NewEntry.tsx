@@ -121,6 +121,7 @@ export interface GedDraft {
   cidCodigo?: string;
   cidDescricao?: string;
   medicoNome?: string;
+  medicoCrm?: string;
 }
 
 interface NewEntryProps {
@@ -320,6 +321,7 @@ export function NewEntry({ editDoc = null, onResubmitDone, gedDraft = null, onGe
         setCidSearch(gedDraft.cidDescricao ? `${cid.codigo} — ${cid.descricao}` : cid.codigo);
       }
       if (gedDraft.medicoNome) setMedicoNome(gedDraft.medicoNome);
+      if (gedDraft.medicoCrm) setMedicoCrm(gedDraft.medicoCrm);
     }
   }, [gedDraft]);
 

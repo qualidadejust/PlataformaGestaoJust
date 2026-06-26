@@ -65,10 +65,11 @@ export default function App() {
           gedDocumentoId: doc.id,
           colaboradorId: doc.entidade_id,
           tipo,
-          dataEmissao: dados.data_inicio || doc.valido_ate || '',
+          dataEmissao: dados.data_emissao || dados.data_inicio || doc.valido_ate || '',
           dias: dados.dias_afastamento ? Number(String(dados.dias_afastamento).replace(/\D/g, '')) || undefined : undefined,
           cidCodigo: dados.cid || undefined,
-          medicoNome: dados.medico || undefined,
+          medicoNome: dados.medico_nome || dados.medico || undefined,
+          medicoCrm: dados.medico_crm || undefined,
         });
         setCurrentView('new_entry');
       } catch {

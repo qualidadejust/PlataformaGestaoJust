@@ -13,6 +13,9 @@ interface DadosExtraidos {
   dias_afastamento?: string;
   horas?: string;
   data_inicio?: string;
+  data_emissao?: string;
+  medico_nome?: string;
+  medico_crm?: string;
   data_realizacao?: string;
   vencimento?: string;
   instrutor?: string;
@@ -52,6 +55,9 @@ const CAMPOS: { k: keyof DadosExtraidos; label: string }[] = [
   { k: "dias_afastamento", label: "Dias de afastamento" },
   { k: "horas", label: "Horas" },
   { k: "data_inicio", label: "Início" },
+  { k: "data_emissao", label: "Emissão" },
+  { k: "medico_nome", label: "Médico" },
+  { k: "medico_crm", label: "CRM/CRO" },
   { k: "data_realizacao", label: "Realização" },
   { k: "vencimento", label: "Vencimento" },
   { k: "instrutor", label: "Instrutor" },
