@@ -20,6 +20,23 @@ Toda alteração deve ser **validada contra `docs/resumo-projeto.md`**:
   nunca pode ficar desatualizado. (Mudança dentro de um app → atualize também o resumo
   daquele app.)
 
+## Workflow de Git — branch por mudança + pull request
+
+Repositório: **https://github.com/qualidadejust/PlataformaGestaoJust** (remote `origin`).
+A branch principal é **`deploy-render-postgres`**. **Nunca commite direto na principal.**
+
+Para **toda mudança**, siga o ciclo:
+1. **Branch nova** a partir da principal atualizada:
+   `git switch deploy-render-postgres && git pull && git switch -c <tipo>/<descricao-curta>`
+   (ex.: `feat/rateio-frota`, `fix/login-core`).
+2. Faça a alteração e rode `npm run lint` no app tocado (sem erros).
+3. **add → commit → push**: `git add -A && git commit -m "<msg>" && git push -u origin HEAD`.
+4. **Só então** abra o pull request para a principal: `gh pr create --base deploy-render-postgres --fill`.
+
+**Commits breves e simples**, em pt-BR, descrevendo a mudança feita
+(ex.: `feat(frota): rateio por km rodado`, `fix(core): valida CPF no cadastro`).
+Uma mudança = uma branch = um PR. Não junte mudanças não relacionadas.
+
 ## Arquitetura em uma linha
 
 Monorepo multi-módulo. O **JustCore (4100)** é o **dono único dos cadastros** (fonte de

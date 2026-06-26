@@ -495,3 +495,23 @@ TODOS os apps (vistoria, FVS, EPI, clima, triagem, assistência). Mora no **Core
   Core em vez do modelo local) → FVS/qualidade → EPI → surveys. O `<FormRenderer schema>` (front
   compartilhado) lê o JSON e monta a tela. Migration aditiva `20260625140000_motor_formularios`
   no Neon `justcore` (4 tabelas novas).
+
+## 15. CLAUDE.md por pasta — índice rápido
+
+Cada pasta do monorepo tem um `CLAUDE.md` com resumo do conteúdo, stack e portas.
+O modelo deve ler o CLAUDE.md da pasta antes de explorar o código.
+
+| Pasta | CLAUDE.md |
+|---|---|
+| `JustCore/` | [`JustCore/CLAUDE.md`](../JustCore/CLAUDE.md) |
+| `JustEleva/app/` | [`JustEleva/app/CLAUDE.md`](../JustEleva/app/CLAUDE.md) |
+| `JustSecurity/` | [`JustSecurity/CLAUDE.md`](../JustSecurity/CLAUDE.md) |
+| `JustTrain/` | [`JustTrain/CLAUDE.md`](../JustTrain/CLAUDE.md) |
+| `JustFrota/` | [`JustFrota/CLAUDE.md`](../JustFrota/CLAUDE.md) |
+| `JustGate/` | [`JustGate/CLAUDE.md`](../JustGate/CLAUDE.md) |
+| `JustAtestados/` | [`JustAtestados/CLAUDE.md`](../JustAtestados/CLAUDE.md) |
+| `JustVistoria/` | [`JustVistoria/CLAUDE.md`](../JustVistoria/CLAUDE.md) |
+| `JustDocs/` | [`JustDocs/CLAUDE.md`](../JustDocs/CLAUDE.md) |
+| `JustHub/` | [`JustHub/CLAUDE.md`](../JustHub/CLAUDE.md) |
+| `gateway/` | [`gateway/CLAUDE.md`](../gateway/CLAUDE.md) |
+| `docs/` | [`docs/CLAUDE.md`](docs/CLAUDE.md) |
