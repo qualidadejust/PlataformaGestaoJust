@@ -25,9 +25,17 @@ const TTL_MIN = 60;
 // treinamento/certificado → JustTrain; o resto fica só no GED.
 function destinoDoTipo(tipo_codigo: string | null | undefined): string {
   const t = (tipo_codigo ?? "").toLowerCase();
+  if (/admiss|contrato.*trabalho|ficha.*func/.test(t)) return "novo_colaborador";
   if (/atestado|declarac|afastamento/.test(t)) return "atestados";
   if (/treinamento|certificad|capacitac|nr\d/.test(t)) return "treinamento";
   return "ged";
+}
+
+// Lote que agrupa os documentos de uma MESMA admissão (ficha + docs iniciais), para o RH
+// criar o colaborador uma vez e amarrar todos. Agrupa por CPF; sem CPF, cai no telefone de quem enviou.
+function loteAdmissao(dados: Record<string, any>, telefone: string): string {
+  const cpf = String(dados?.cpf ?? "").replace(/\D/g, "");
+  return "adm:" + (cpf || telefone.replace(/\D/g, ""));
 }
 
 export function registerGate(app: Express, perm: (chave: string) => RequestHandler) {
@@ -119,19 +127,31 @@ export function registerGate(app: Express, perm: (chave: string) => RequestHandl
         telefone: pend.telefone,
         colaborador_nome: pend.colaborador_nome,
       };
+      let dados: Record<string, any> = {};
       try {
         const d = JSON.parse(pend.dados_extraidos || "{}");
-        if (d && typeof d === "object" && Object.keys(d).length) meta.dados_extraidos = d;
+        if (d && typeof d === "object") dados = d;
+        if (Object.keys(dados).length) meta.dados_extraidos = dados;
       } catch {
         /* dados_extraidos inválido — ignora */
       }
 
+      // ADMISSÃO: o documento é de uma pessoa que AINDA NÃO existe no cadastro. Não dá pra
+      // amarrar a um colaborador — guarda num LOTE (por CPF) até o RH criar o colaborador.
+      const isAdmissao = pend.destino === "novo_colaborador";
+      const entidadeTipo = isAdmissao ? "admissao" : pend.entidade_tipo;
+      const entidadeId = isAdmissao ? loteAdmissao(dados, pend.telefone) : pend.colaborador_id;
+      const entidadeLabel = isAdmissao
+        ? (dados.nome_completo as string) || "Admissão (novo colaborador)"
+        : pend.colaborador_nome || undefined;
+      if (isAdmissao) meta.enviado_por = pend.colaborador_nome; // quem ENVIOU (ex.: RH)
+
       const categoria = pend.tipo_codigo || "outro";
       const storage = getStorage();
       const ref = await storage.put({
-        entidade_tipo: pend.entidade_tipo,
-        entidade_id: pend.colaborador_id,
-        entidade_label: pend.colaborador_nome || undefined,
+        entidade_tipo: entidadeTipo,
+        entidade_id: entidadeId,
+        entidade_label: entidadeLabel,
         categoria,
         nome_original: nomeArquivo,
         content_type: f.mimetype,
@@ -142,8 +162,8 @@ export function registerGate(app: Express, perm: (chave: string) => RequestHandl
       try {
         doc = await db.documento.create({
           data: {
-            entidade_tipo: pend.entidade_tipo,
-            entidade_id: pend.colaborador_id,
+            entidade_tipo: entidadeTipo,
+            entidade_id: entidadeId,
             categoria,
             tipo_codigo: pend.tipo_codigo || null,
             natureza: "registro",
@@ -174,6 +194,43 @@ export function registerGate(app: Express, perm: (chave: string) => RequestHandl
         data: { status: "confirmado", doc_id: doc.id },
       });
       res.status(201).json({ ok: true, doc_id: doc.id, destino: pend.destino });
+    } catch (e) {
+      res.status(400).json({ error: String((e as Error).message) });
+    }
+  });
+
+  // ADMISSÃO: o RH confere os dados que a IA leu e cria o colaborador. Cria o cadastro-mestre
+  // e RE-AMARRA todos os documentos do lote (ficha + iniciais) ao novo colaborador, marcando-os
+  // como aprovados (saem da fila). O registro só nasce aqui, com humano confirmando.
+  app.post("/api/gate/admissao/criar", perm("core.cadastro.write"), async (req, res) => {
+    try {
+      const { lote, colaborador } = req.body ?? {};
+      if (!lote || !colaborador?.nome)
+        return res.status(400).json({ error: "lote e colaborador.nome são obrigatórios" });
+
+      const novo = await db.colaborador.create({
+        data: {
+          nome: colaborador.nome,
+          cpf: colaborador.cpf || null,
+          rg: colaborador.rg || null,
+          data_nascimento: colaborador.data_nascimento || null,
+          data_admissao: colaborador.data_admissao || null,
+          pis: colaborador.pis || null,
+          email: colaborador.email || null,
+          telefone: colaborador.telefone || null,
+          cargo_id: colaborador.cargo_id || null,
+          empresa_id: colaborador.empresa_id || null,
+          setor: colaborador.setor || null,
+          status: "ativo",
+        },
+      });
+
+      // re-amarra os documentos do lote ao colaborador recém-criado e tira-os da fila.
+      const r = await db.documento.updateMany({
+        where: { entidade_tipo: "admissao", entidade_id: lote, analise: "pendente" },
+        data: { entidade_tipo: "colaborador", entidade_id: novo.id, analise: "aprovado" },
+      });
+      res.status(201).json({ colaborador: novo, documentos_vinculados: r.count });
     } catch (e) {
       res.status(400).json({ error: String((e as Error).message) });
     }

@@ -41,6 +41,8 @@ function montarPrompt(entidade_tipo: string, tipos: { codigo: string; nome: stri
     `  Preencha SÓ o que se aplicar e existir no documento; deixe "" o que não se aplica:`,
     `  • Atestado/declaração médica → cid, dias_afastamento, horas, data_inicio (YYYY-MM-DD).`,
     `  • Treinamento/certificado → data_realizacao (YYYY-MM-DD), vencimento (YYYY-MM-DD), instrutor, carga_horaria.`,
+    `  • Ficha de admissão / contrato de trabalho (pessoa sendo admitida) → nome_completo, cpf,`,
+    `    rg, data_nascimento (YYYY-MM-DD), data_admissao (YYYY-MM-DD), cargo, pis.`,
   ].join("\n");
 }
 
@@ -98,6 +100,14 @@ export function registerTriagem(app: Express, perm: (chave: string) => RequestHa
               vencimento: { type: "STRING" },
               instrutor: { type: "STRING" },
               carga_horaria: { type: "STRING" },
+              // admissão (pessoa ainda não cadastrada)
+              nome_completo: { type: "STRING" },
+              cpf: { type: "STRING" },
+              rg: { type: "STRING" },
+              data_nascimento: { type: "STRING" },
+              data_admissao: { type: "STRING" },
+              cargo: { type: "STRING" },
+              pis: { type: "STRING" },
             },
           },
         },

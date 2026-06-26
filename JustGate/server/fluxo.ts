@@ -101,36 +101,53 @@ export async function processarMidia(msg: Inbound, colaborador: CoreColaborador)
     return;
   }
 
-  const pend = await criarPendente({
-    telefone: msg.from,
-    colaborador_id: colaborador.id,
-    colaborador_nome: colaborador.nome,
-    media_id: msg.mediaId,
-    arquivo: filename,
-    entidade_tipo: "colaborador",
-    tipo_codigo: ia.tipo_codigo,
-    sensivel: ia.sensivel,
-    valido_ate: ia.valido_ate,
-    dados_extraidos: ia.dados_extraidos,
-    resumo: ia.resumo,
-    confianca: ia.confianca,
-    message_id: msg.id ?? `${msg.from}-${msg.mediaId}`,
-  });
-  // idempotência: webhook reenviado → não manda os botões de novo
-  if (pend.jaExistia) return;
+  try {
+    const pend = await criarPendente({
+      telefone: msg.from,
+      colaborador_id: colaborador.id,
+      colaborador_nome: colaborador.nome,
+      media_id: msg.mediaId,
+      arquivo: filename,
+      entidade_tipo: "colaborador",
+      tipo_codigo: ia.tipo_codigo,
+      sensivel: ia.sensivel,
+      valido_ate: ia.valido_ate,
+      dados_extraidos: ia.dados_extraidos,
+      resumo: ia.resumo,
+      confianca: ia.confianca,
+      message_id: msg.id ?? `${msg.from}-${msg.mediaId}`,
+    });
+    // idempotência: webhook reenviado → não manda os botões de novo
+    if (pend.jaExistia) return;
 
-  await sendButtons(msg.from, montarResumo(quem, ia), [
-    { id: `confirmar:${pend.id}`, title: "✅ Confirmar" },
-    { id: `cancelar:${pend.id}`, title: "✖️ Cancelar" },
-  ]);
+    await sendButtons(msg.from, montarResumo(quem, ia), [
+      { id: `confirmar:${pend.id}`, title: "✅ Confirmar" },
+      { id: `cancelar:${pend.id}`, title: "✖️ Cancelar" },
+    ]);
+  } catch (e) {
+    console.error("[fluxo] criar pendente/botões falhou:", (e as Error).message);
+    await sendText(msg.from, `${quem}, recebi e li o documento, mas falhei ao registrar a proposta. Tente de novo em instantes.`);
+  }
 }
 
 // Texto do card de confirmação: o que a IA entendeu + os campos detectados.
 function montarResumo(quem: string, ia: Triagem): string {
+  const d = ia.dados_extraidos ?? {};
+  const ehAdmissao = /admiss|contrato.*trabalho|ficha.*func/.test((ia.tipo_codigo ?? "").toLowerCase());
+
+  if (ehAdmissao) {
+    const linhas = [`${quem}, identifiquei uma *admissão* (novo colaborador):`];
+    if (d.nome_completo) linhas.push(`👤 ${d.nome_completo}`);
+    if (d.cpf) linhas.push(`CPF: ${d.cpf}`);
+    if (d.cargo) linhas.push(`Cargo: ${d.cargo}`);
+    if (d.data_admissao) linhas.push(`Admissão: ${fmtData(d.data_admissao)}`);
+    linhas.push("", "Confirma o envio para o RH iniciar o cadastro?");
+    return linhas.join("\n");
+  }
+
   const linhas = [`${quem}, identifiquei o seguinte:`];
   if (ia.resumo) linhas.push(`📄 ${ia.resumo}`);
   if (ia.tipo_codigo) linhas.push(`Tipo: ${ia.tipo_codigo}`);
-  const d = ia.dados_extraidos ?? {};
   if (d.cid) linhas.push(`CID: ${d.cid}`);
   if (d.dias_afastamento) linhas.push(`Afastamento: ${d.dias_afastamento} dia(s)`);
   if (d.horas) linhas.push(`Horas: ${d.horas}`);
