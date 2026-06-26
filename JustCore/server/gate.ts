@@ -14,6 +14,7 @@ import { prisma } from "./lib/prisma.ts";
 import { getStorage } from "./lib/storage/index.ts";
 import { randomUUID } from "node:crypto";
 import { fixFilename } from "./documentos.ts";
+import { montarNomeArquivo } from "./lib/nome-arquivo.ts";
 
 const db = prisma as any;
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 100 * 1024 * 1024 } });
@@ -118,7 +119,7 @@ export function registerGate(app: Express, perm: (chave: string) => RequestHandl
 
       const f = (req as any).file as Express.Multer.File | undefined;
       if (!f) return res.status(400).json({ error: "arquivo (campo 'file') é obrigatório" });
-      const nomeArquivo = fixFilename(f.originalname) || pend.arquivo;
+      const nomeOriginal = fixFilename(f.originalname) || pend.arquivo;
 
       // metadados do doc carregam os campos detectados (para a ponte pré-preencher o app dono).
       const meta: Record<string, any> = {
@@ -145,6 +146,16 @@ export function registerGate(app: Express, perm: (chave: string) => RequestHandl
         ? (dados.nome_completo as string) || "Admissão (novo colaborador)"
         : pend.colaborador_nome || undefined;
       if (isAdmissao) meta.enviado_por = pend.colaborador_nome; // quem ENVIOU (ex.: RH)
+
+      // nome padronizado (COLABORADOR_OBRA_CODIGO_data) + preserva o original
+      meta._arquivo_original = nomeOriginal;
+      const nomeArquivo = await montarNomeArquivo({
+        original: nomeOriginal,
+        tipo_codigo: pend.tipo_codigo,
+        entidade_tipo: entidadeTipo,
+        entidade_id: entidadeId,
+        entidade_label: entidadeLabel,
+      });
 
       const categoria = pend.tipo_codigo || "outro";
       const storage = getStorage();

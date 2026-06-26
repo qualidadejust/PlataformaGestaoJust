@@ -5,6 +5,7 @@ import { prisma } from "./lib/prisma.ts";
 import { logAcesso, type TokenPayload } from "./lib/auth.ts";
 import { getStorage, storageByDriver } from "./lib/storage/index.ts";
 import { TAXONOMIA } from "./lib/ged-taxonomia.ts";
+import { montarNomeArquivo } from "./lib/nome-arquivo.ts";
 
 const db = prisma as any;
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 100 * 1024 * 1024 } });
@@ -90,7 +91,7 @@ export function registerDocumentos(app: Express, perm: (chave: string) => Reques
       if (!entidade_tipo || !entidade_id || !categoria)
         return res.status(400).json({ error: "entidade_tipo, entidade_id e categoria são obrigatórios" });
       // corrige o nome do arquivo (multipart vem em Latin-1) antes de usar/gravar
-      const nomeArquivo = fixFilename(f.originalname);
+      const nomeOriginal = fixFilename(f.originalname);
 
       // classificação: o tipo do catálogo define defaults (natureza, setor, sensível, retenção)
       const tipo = tipo_codigo ? await db.tipoDocumento.findUnique({ where: { codigo: tipo_codigo } }) : null;
@@ -115,7 +116,16 @@ export function registerDocumentos(app: Express, perm: (chave: string) => Reques
       for (const [k, v] of Object.entries({ processo, classificacao, codigo_doc, revisao, observacao })) {
         if (v !== undefined && v !== null && v !== "") metaObj[k] = v;
       }
-      const metadadosStr = Object.keys(metaObj).length ? JSON.stringify(metaObj) : null;
+      // padroniza o nome do arquivo (COLABORADOR_OBRA_CODIGO_data) e preserva o original.
+      metaObj._arquivo_original = nomeOriginal;
+      const nomeArquivo = await montarNomeArquivo({
+        original: nomeOriginal,
+        tipo_codigo: tipo_codigo ?? null,
+        entidade_tipo,
+        entidade_id,
+        entidade_label,
+      });
+      const metadadosStr = JSON.stringify(metaObj);
 
       // versionamento: nova versão herda o grupo e incrementa; senão abre grupo novo
       let grupo_id = randomUUID();
