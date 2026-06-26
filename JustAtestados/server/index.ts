@@ -7,7 +7,7 @@ import cors from "cors";
 import multer from "multer";
 import { prisma } from "./lib/prisma.ts";
 import { requireAuth, requirePerm } from "./lib/auth.ts";
-import { gedUpload } from "./core.ts";
+import { gedUpload, gedMarcarAprovado } from "./core.ts";
 
 const app = express();
 app.use(cors());
@@ -127,6 +127,15 @@ app.post("/api/atestados", requirePerm("atestados.write"), upload.single("file")
           where: { id: atestado.id },
           data: { ged_documento_id: ged.id, anexo_nome: ged.nome },
         });
+    } else if (!f && req.body?.ged_documento_id) {
+      // PONTE (WhatsApp/JustDocs): o anexo JÁ está no GED — só referencia o doc existente e
+      // tira-o da fila de análise (marca aprovado). Não re-sobe arquivo (Opção A).
+      const gedId = String(req.body.ged_documento_id);
+      const marc = await gedMarcarAprovado(gedId);
+      atestado = await db.atestado.update({
+        where: { id: atestado.id },
+        data: { ged_documento_id: gedId, anexo_nome: marc?.nome ?? req.body?.anexo_nome ?? null },
+      });
     }
     await logEvento(dados.apontador_nome ?? undefined, "Lançamento", "Novo Lançamento", `${ticket} (${dados.tipo})`);
     res.status(201).json(atestado);

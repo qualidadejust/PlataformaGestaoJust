@@ -68,6 +68,18 @@ const DESTINO_LABEL: Record<string, string> = {
   ged: "GED",
 };
 
+// URL de outro app da plataforma (para a "ponte"). Vem de VITE_URL_* (render.yaml). Normaliza
+// o host que o Render às vezes injeta só com o nome do serviço (sem .onrender.com).
+const env = (import.meta as any).env ?? {};
+function appUrl(name: string): string | null {
+  let u = env[name];
+  if (!u) return null;
+  u = String(u).replace(/^https?:\/\//, "").replace(/\/+$/, "");
+  if (!u.includes(".")) u = `${u}.onrender.com`;
+  return `https://${u}`;
+}
+const ATESTADOS_URL = appUrl("VITE_URL_ATESTADOS");
+
 export default function FilaView() {
   const qc = useQueryClient();
   const [admissao, setAdmissao] = useState<Doc | null>(null);
@@ -195,6 +207,15 @@ function Card({
             >
               <UserPlus className="size-3.5" /> Criar colaborador
             </button>
+          ) : destino === "atestados" && ATESTADOS_URL ? (
+            <a
+              href={`${ATESTADOS_URL}/?ged=${doc.id}`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-md bg-[#0f2742] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#163554] dark:bg-teal-600 dark:hover:bg-teal-500"
+            >
+              <ExternalLink className="size-3.5" /> Finalizar no JustAtestados
+            </a>
           ) : (
             destino !== "ged" && (
               <span

@@ -3,7 +3,7 @@ import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
 import { Login } from './views/Login';
 import { Dashboard } from './views/Dashboard';
-import { NewEntry } from './views/NewEntry';
+import { NewEntry, type GedDraft } from './views/NewEntry';
 import { MeusEnvios } from './views/MeusEnvios';
 import { HrQueue } from './views/HrQueue';
 import { History } from './views/History';
@@ -31,6 +31,7 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);   // drawer mobile
   const [registrySearch, setRegistrySearch] = useState(''); // termo vindo da busca do Header
   const [editDoc, setEditDoc] = useState<DocumentoView | null>(null); // doc em reenvio
+  const [gedDraft, setGedDraft] = useState<GedDraft | null>(null); // PONTE: lançamento a partir de doc do GED
 
   useEffect(() => {
     // Tema padrão = claro. Só fica escuro se o usuário escolheu explicitamente.
@@ -42,6 +43,39 @@ export default function App() {
       document.documentElement.classList.remove('dark');
     }
   }, []);
+
+  // PONTE do JustDocs: ao abrir com ?ged=<docId>, busca o doc no GED do Core e pré-preenche
+  // um novo lançamento (atestado/declaração) referenciando esse doc. Roda após o login.
+  useEffect(() => {
+    if (!user) return;
+    const params = new URLSearchParams(window.location.search);
+    const gedId = params.get('ged');
+    if (!gedId) return;
+    // limpa a URL para não reabrir no refresh
+    window.history.replaceState({}, '', window.location.pathname);
+    (async () => {
+      try {
+        const r = await fetch(`/core/api/documentos/${gedId}`);
+        if (!r.ok) return;
+        const doc: any = await r.json();
+        const dados = doc?.metadados?.dados_extraidos ?? {};
+        const codigo = String(doc?.tipo_codigo ?? '').toLowerCase();
+        const tipo: 'atestado' | 'declaracao' = /declarac/.test(codigo) ? 'declaracao' : 'atestado';
+        setGedDraft({
+          gedDocumentoId: doc.id,
+          colaboradorId: doc.entidade_id,
+          tipo,
+          dataEmissao: dados.data_inicio || doc.valido_ate || '',
+          dias: dados.dias_afastamento ? Number(String(dados.dias_afastamento).replace(/\D/g, '')) || undefined : undefined,
+          cidCodigo: dados.cid || undefined,
+          medicoNome: dados.medico || undefined,
+        });
+        setCurrentView('new_entry');
+      } catch {
+        /* doc indisponível — ignora a ponte */
+      }
+    })();
+  }, [user]);
 
   const toggleDarkMode = () => {
     setIsDarkMode(prev => {
@@ -76,6 +110,7 @@ export default function App() {
 
   const navigate = (view: ViewState) => {
     setEditDoc(null); // sair de um reenvio em andamento ao navegar pelo menu
+    setGedDraft(null); // sair de uma ponte do GED em andamento
     if (allowed.includes(view)) setCurrentView(view);
   };
 
@@ -100,7 +135,14 @@ export default function App() {
   const renderView = () => {
     switch (activeView) {
       case 'dashboard': return <Dashboard onNavigate={navigate} />;
-      case 'new_entry': return <NewEntry editDoc={editDoc} onResubmitDone={handleResubmitDone} />;
+      case 'new_entry': return (
+        <NewEntry
+          editDoc={editDoc}
+          onResubmitDone={handleResubmitDone}
+          gedDraft={gedDraft}
+          onGedDone={() => { setGedDraft(null); setCurrentView(allowed.includes('queue') ? 'queue' : 'meus_envios'); }}
+        />
+      );
       case 'meus_envios': return <MeusEnvios onReenviar={handleReenviar} />;
       case 'queue': return <HrQueue />;
       case 'history': return <History />;

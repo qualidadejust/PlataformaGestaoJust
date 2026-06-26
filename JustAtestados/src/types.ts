@@ -119,6 +119,7 @@ export interface Documento {
   dataAnalise?: string;      // ISO date em que o RH aprovou/reprovou
   analista?: string;         // nome do analista de RH que avaliou
   anexo?: Anexo | null;      // arquivo anexado
+  gedDocumentoId?: string;   // PONTE: referencia um doc JÁ existente no GED (não re-sobe arquivo)
 
   // ── Autoria e devolução ──
   apontadorId?: string;      // uid de quem enviou o documento

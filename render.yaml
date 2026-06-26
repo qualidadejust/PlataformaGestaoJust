@@ -193,6 +193,9 @@ services:
         fromService: { name: just-gateway, type: web, property: host }
       - key: VITE_API_PREFIX
         value: /core
+      # Ponte da Fila de Análise → app dono (ex.: "Finalizar no JustAtestados" abre ?ged=<docId>).
+      - key: VITE_URL_ATESTADOS
+        fromService: { name: just-atestados-web, type: web, property: host }
     routes:
       - type: rewrite
         source: /*

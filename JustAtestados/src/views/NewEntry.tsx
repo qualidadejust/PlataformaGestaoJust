@@ -110,18 +110,35 @@ async function compressImage(file: File): Promise<Anexo> {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
+// Rascunho vindo da Fila de Análise do JustDocs (doc do WhatsApp já no GED): pré-preenche o
+// lançamento e referencia o doc existente (Opção A — não re-sobe arquivo).
+export interface GedDraft {
+  gedDocumentoId: string;
+  colaboradorId: string;
+  tipo: DocumentType;
+  dataEmissao?: string;
+  dias?: number;
+  cidCodigo?: string;
+  cidDescricao?: string;
+  medicoNome?: string;
+}
+
 interface NewEntryProps {
   /** Quando presente, o formulário entra em modo edição/reenvio deste documento. */
   editDoc?: DocumentoView | null;
   /** Chamado após reenvio bem-sucedido (ex.: voltar para "Meus Envios"). */
   onResubmitDone?: () => void;
+  /** Pré-preenchimento a partir de um doc do GED (ponte do JustDocs). */
+  gedDraft?: GedDraft | null;
+  /** Chamado após finalizar um lançamento criado a partir da ponte. */
+  onGedDone?: () => void;
 }
 
-export function NewEntry({ editDoc = null, onResubmitDone }: NewEntryProps = {}) {
+export function NewEntry({ editDoc = null, onResubmitDone, gedDraft = null, onGedDone }: NewEntryProps = {}) {
   const { user } = useAuth();
 
   // ── Navigation ──────────────────────────────────────────────────────────────
-  const [docType, setDocType] = useState<DocumentType | null>(editDoc?.tipo ?? null);
+  const [docType, setDocType] = useState<DocumentType | null>(editDoc?.tipo ?? gedDraft?.tipo ?? null);
 
   // ── Toast ────────────────────────────────────────────────────────────────────
   const [toast, setToast] = useState<ToastState | null>(null);
@@ -288,6 +305,31 @@ export function NewEntry({ editDoc = null, onResubmitDone }: NewEntryProps = {})
     if (col) { setSelectedCol(col); setColSearch(col.nome); }
   }, [editDoc, colaboradores, selectedCol]);
 
+  // ── Pré-preenchimento via PONTE (doc do GED vindo do JustDocs) ────────────────
+  const gedPrefilled = useRef(false);
+  useEffect(() => {
+    if (!gedDraft || gedPrefilled.current) return;
+    gedPrefilled.current = true;
+    if (gedDraft.tipo === 'atestado') {
+      setDataEmissao(gedDraft.dataEmissao ?? '');
+      if (gedDraft.dias != null) setDias(String(gedDraft.dias));
+      if (gedDraft.cidCodigo) {
+        setHasCID(true);
+        const cid = { codigo: gedDraft.cidCodigo, descricao: gedDraft.cidDescricao ?? '' } as Cid;
+        setSelectedCid(cid);
+        setCidSearch(gedDraft.cidDescricao ? `${cid.codigo} — ${cid.descricao}` : cid.codigo);
+      }
+      if (gedDraft.medicoNome) setMedicoNome(gedDraft.medicoNome);
+    }
+  }, [gedDraft]);
+
+  // Seleciona o colaborador do rascunho do GED quando a lista carregar.
+  useEffect(() => {
+    if (!gedDraft || selectedCol || colaboradores.length === 0) return;
+    const col = colaboradores.find(c => c.id === gedDraft.colaboradorId);
+    if (col) { setSelectedCol(col); setColSearch(col.nome); }
+  }, [gedDraft, colaboradores, selectedCol]);
+
   async function processFile(file: File) {
     try {
       if (file.type.startsWith('image/')) {
@@ -416,7 +458,9 @@ export function NewEntry({ editDoc = null, onResubmitDone }: NewEntryProps = {})
           analista: undefined,
           apontadorId: user?.id,
           apontadorNome: user?.nome,
-          anexo: anexo ?? null,
+          // PONTE: referencia o doc já no GED (não re-sobe arquivo); senão usa o anexo do upload.
+          anexo: gedDraft ? null : (anexo ?? null),
+          gedDocumentoId: gedDraft?.gedDocumentoId,
         };
         const doc = await dataService.createDocumento({ ...base, ...campos });
         showToast(`Enviado para análise — ${doc.ticket}`, 'success');
@@ -426,7 +470,8 @@ export function NewEntry({ editDoc = null, onResubmitDone }: NewEntryProps = {})
           modulo: 'Novo Lançamento',
           detalhe: `${doc.ticket} (${docType}) enviado para ${selectedCol.nome}`,
         }).catch(() => {});
-        resetForm();
+        if (gedDraft) onGedDone?.();
+        else resetForm();
       }
     } catch {
       showToast('Erro ao enviar documento. Tente novamente.', 'error');

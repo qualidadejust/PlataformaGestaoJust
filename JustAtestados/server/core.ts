@@ -27,6 +27,24 @@ export const coreColaboradores = () => get<CoreRef>("/api/colaboradores");
 export const coreObras = () => get<CoreRef>("/api/obras");
 export const coreCargos = () => get<CoreRef>("/api/cargos");
 
+// Marca um documento do GED como APROVADO (sai da fila de análise do JustDocs). Usado quando
+// um doc que chegou pelo WhatsApp é finalizado virando atestado aqui (ponte). Devolve o nome.
+export async function gedMarcarAprovado(docId: string): Promise<{ id: string; nome?: string } | null> {
+  try {
+    const r = await fetch(`${CORE_URL}/api/documentos/${docId}/analise`, {
+      method: "POST",
+      headers: { "x-internal-token": INTERNAL(), "Content-Type": "application/json" },
+      body: JSON.stringify({ acao: "aprovar" }),
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!r.ok) return null;
+    const d = (await r.json()) as { id: string; nome_original?: string };
+    return { id: d.id, nome: d.nome_original };
+  } catch {
+    return null;
+  }
+}
+
 export interface GedUploadInput {
   buffer: Buffer;
   filename: string;

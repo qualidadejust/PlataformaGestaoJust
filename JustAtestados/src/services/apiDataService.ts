@@ -154,6 +154,7 @@ function toBody(doc: Partial<Documento>): Record<string, any> {
   set("hora_fim", doc.horaFim);
   set("horas", doc.horas);
   set("local", doc.local);
+  set("ged_documento_id", doc.gedDocumentoId); // ponte: referencia doc já no GED
   if (doc.cid !== undefined) {
     b.cid_codigo = doc.cid?.codigo ?? null;
     b.cid_descricao = doc.cid?.descricao ?? null;
