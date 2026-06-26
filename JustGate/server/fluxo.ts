@@ -26,6 +26,10 @@ interface Triagem {
   confianca: string;
   resumo: string;
   dados_extraidos: Record<string, string>;
+  // colaborador detectado NO documento (a IA casa o nome com o cadastro do Core)
+  colaborador_id?: string | null;
+  colaborador_nome?: string;
+  match?: string; // exato | parcial | sem
 }
 interface Pendente {
   id: string;
@@ -101,11 +105,18 @@ export async function processarMidia(msg: Inbound, colaborador: CoreColaborador)
     return;
   }
 
+  // DONO do documento: se a IA reconheceu QUEM é o documento (nome casado no Core), usa essa
+  // pessoa — não o remetente. Ex.: RH manda o atestado do José → vai pro José, não pro RH.
+  // Sem match (ou admissão de pessoa nova), cai no remetente. O RH ainda confere na Fila.
+  const temMatch = !!ia.colaborador_id && (ia.match ?? "sem") !== "sem";
+  const donoId = temMatch ? (ia.colaborador_id as string) : colaborador.id;
+  const donoNome = temMatch ? (ia.colaborador_nome as string) : colaborador.nome;
+
   try {
     const pend = await criarPendente({
       telefone: msg.from,
-      colaborador_id: colaborador.id,
-      colaborador_nome: colaborador.nome,
+      colaborador_id: donoId,
+      colaborador_nome: donoNome,
       media_id: msg.mediaId,
       arquivo: filename,
       entidade_tipo: "colaborador",
