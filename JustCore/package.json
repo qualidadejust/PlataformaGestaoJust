@@ -14,6 +14,7 @@
     "db:generate": "prisma generate",
     "db:seed": "tsx prisma/seed.ts",
     "db:seed-acesso": "tsx prisma/seed-acesso.ts",
+    "db:seed-formularios": "tsx prisma/seed-formularios.ts",
     "db:studio": "prisma studio"
   },
   "dependencies": {

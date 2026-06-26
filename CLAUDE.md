@@ -59,9 +59,17 @@ npm run lint                             # tsc --noEmit — deve passar SEM erro
 Reserve o modelo principal para integração e decisões de arquitetura; **delegue trabalho
 mecânico/em massa e análise de domínio a skills/subagentes.**
 
-Skills de domínio já existentes (invoque com `/nome`):
-- **RH / Desempenho** (JustEleva): `coachdesempenho`, `clima-organizacional`,
-  `indicadores-dados`, `ux-ui-design`, `ui-polish`.
+Skills de domínio já existentes (invoque com `/nome`) — todas vivem na **raiz do monorepo**
+(`.claude/skills/`), disponíveis em qualquer app:
+- **RH / Desempenho**: `coachdesempenho`, `clima-organizacional`, `indicadores-dados`.
+- **Design / UX**: `ux-ui-design` (projeto/heurísticas), `ui-polish` (densidade/diagramação).
+- **Por módulo**: `sst-epi` (JustSecurity), `justgate-whatsapp` (JustGate), `frota-gestao`,
+  `vistoria-entrega` (JustVistoria), `ged-documentos`, `qualidade-fvs`, `lgpd-compliance`,
+  `controle-acesso`, `banco-dados`.
+- **Arquitetura transversal**: `motor-formularios` (base única de formulários/checklists para
+  todos os apps — template versionado + instância; mora no Core como o GED).
+- **Específicas do JustEleva** (operacionais, só pra aquele app): `eleva-launch` (sobe
+  3000/3001), `eleva-caveman` (debug de conexão front↔back).
 - **Técnicas**: `frontend-just`, `backend-just`, `qa-tester`, `code-review`, `verify`, `run`.
 
 Ao abrir um módulo novo (Obras, Qualidade, SST, Atestados, Acessos…), considere criar uma

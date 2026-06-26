@@ -77,6 +77,8 @@ export function registerDocumentos(app: Express, perm: (chave: string) => Reques
         valido_ate,
         natureza, // padrao | registro (default vem do tipo do catálogo)
         setor, // eixo de navegação (default vem do tipo)
+        origem, // canal de entrada: upload | whatsapp
+        analise, // fila de conferência: pendente | aprovado | rejeitado (null = já efetivado)
         processo, // SGQ (doc padrão) -> metadados
         classificacao, // SGQ (doc padrão) -> metadados
         codigo_doc, // código PGQ (ex.: "PEO 05") -> metadados
@@ -155,6 +157,8 @@ export function registerDocumentos(app: Express, perm: (chave: string) => Reques
             grupo_id,
             versao,
             status: "vigente",
+            origem: origem ?? null,
+            analise: analise ?? null,
             valido_ate: valido_ate ?? null,
             storage_driver: ref.driver,
             sp_drive_id: ref.drive_id,
@@ -179,7 +183,7 @@ export function registerDocumentos(app: Express, perm: (chave: string) => Reques
 
   app.get("/api/documentos", ler, async (req, res) => {
     try {
-      const { entidade_tipo, entidade_id, categoria, tipo_codigo, status, vigente, natureza, setor } =
+      const { entidade_tipo, entidade_id, categoria, tipo_codigo, status, vigente, natureza, setor, origem, analise } =
         req.query as Record<string, string | undefined>;
       const where: Record<string, string> = {};
       if (entidade_tipo) where.entidade_tipo = entidade_tipo;
@@ -189,6 +193,8 @@ export function registerDocumentos(app: Express, perm: (chave: string) => Reques
       if (natureza) where.natureza = natureza;
       if (setor) where.setor = setor;
       if (status) where.status = status;
+      if (origem) where.origem = origem;
+      if (analise) where.analise = analise; // ?analise=pendente → fila de conferência
       if (vigente === "true") where.status = "vigente"; // atalho: só a versão atual
       const rows = await db.documento.findMany({ where, orderBy: { created_at: "desc" } });
       res.json(rows.map(publicDoc));
@@ -253,6 +259,25 @@ export function registerDocumentos(app: Express, perm: (chave: string) => Reques
       stream.pipe(res);
     } catch (e) {
       res.status(500).json({ error: String((e as Error).message) });
+    }
+  });
+
+  // Fila de análise (JustDocs): conferir um documento que chegou pendente (ex.: via WhatsApp).
+  // aprovar → vira documento normal (analise=aprovado); rejeitar → marca rejeitado (RH pode excluir).
+  app.post("/api/documentos/:id/analise", escrever, async (req, res) => {
+    try {
+      const { acao } = req.body ?? {};
+      if (acao !== "aprovar" && acao !== "rejeitar")
+        return res.status(400).json({ error: "acao deve ser 'aprovar' ou 'rejeitar'" });
+      const doc = await db.documento.findUnique({ where: { id: req.params.id } });
+      if (!doc) return res.status(404).json({ error: "não encontrado" });
+      const novo = await db.documento.update({
+        where: { id: doc.id },
+        data: { analise: acao === "aprovar" ? "aprovado" : "rejeitado" },
+      });
+      res.json(publicDoc(novo));
+    } catch (e) {
+      res.status(400).json({ error: String((e as Error).message) });
     }
   });
 

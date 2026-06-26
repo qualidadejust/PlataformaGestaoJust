@@ -3,10 +3,13 @@ import type { CoreColaborador } from "./core.ts";
 // Mensagem recebida, já normalizada a partir do payload da Cloud API.
 export interface Inbound {
   from: string; // número E.164 do remetente
+  id?: string; // message.id da Meta (idempotência: a Meta reenvia o webhook)
   name?: string; // nome do perfil do WhatsApp
-  type: string; // text | image | document | audio | ...
+  type: string; // text | image | document | audio | interactive | ...
   text?: string; // corpo (quando type=text)
   mediaId?: string; // id da mídia (quando image/document/...)
+  filename?: string; // nome do arquivo (quando type=document)
+  interactiveId?: string; // id do botão clicado (quando type=interactive) ex.: "confirmar:<id>"
 }
 
 // Núcleo do JustGate: decide PARA ONDE encaminhar e o que responder. Por ora é um esqueleto

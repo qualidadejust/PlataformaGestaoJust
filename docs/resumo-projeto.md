@@ -24,6 +24,7 @@ transações** e referencia os IDs do Core (com snapshot dos dados na hora da tr
 | **JustGate** | `JustGate/` | — | 4200 | Gateway **WhatsApp (Meta Cloud API)**: recebe mensagem, identifica o remetente no Core (pelo telefone) e roteia para o módulo. Sem cadastro próprio. |
 | **JustFrota** | `JustFrota/` | 4301 | 4300 | **Gestão de frota**: diário de bordo (viagens) + custos (abastecimento/manutenção/fixos) + **rateio por km** entre as obras. Guarda só transações; veículo/motorista/obra vêm do Core. |
 | **JustAtestados** | `JustAtestados/` | 4701 | 4700 | **Atestados/declarações de comparecimento**: lançamento (apontador) → fila de análise (RH aprova/recusa) → KPIs de absenteísmo. Guarda só a transação + snapshot; colaborador/obra/cargo vêm do Core; **anexo (CID/saúde) vai pro GED do Core como sensível** (guarda só o `ged_documento_id`). Permissões `atestados.read/write/aprovar`; perfil novo `apontador`. Front adaptado do repo externo (`pridema1/atestadosJUST`): telas mantidas, camada de dados trocada por `apiDataService` (back + Core), auth/role derivado dos perfis; CID-10 como asset estático; cadastro é só-leitura do Core (criar/editar no JustCore). |
+| **JustVistoria** | `JustVistoria/` | 4801 | 4800 | **Vistoria & Entrega de obra**: pipeline por unidade (Construção→Inspeção Final→Vistoria do Cliente→Entrega das Chaves), checklist (motor de formulários), não-conformidades com bloqueio, **termos assinados em tela**→GED, relatório PDF. Cliente/Unidade vêm do Core; integra o **cronograma Prevision** (locais/pacotes/prazos). Guarda só transações. Ver skill `vistoria-entrega`. |
 | **JustDocs** | `JustDocs/` | 4400 | — | **GED** (gestão eletrônica de documentos): UI com 4 abas — **Pastas** (navegação tipo SharePoint: SGQ/Obras/Pessoas/Empresa), **Documentos** (enviar/consultar/versionar), **Triagem IA** (sobe até 2 arquivos, a IA propõe tipo/colaborador/sensível/validade, confere e envia ao GED) e **Vencimentos**. **Sem back/DB próprio** — consome a API do Core (proxy `/api`→4100); arquivos no SharePoint. |
 | **Biometria (.NET)** | `JustSecurity/biometria/` | — | 4002 | Serviço **SourceAFIS** (.NET) que faz o **match 1:N** das digitais. Consumido por Core e Security via HTTP. |
 
@@ -61,9 +62,16 @@ Biometria .NET (4002) ◄── Core e Security mandam probe+candidates; devolve
 
 ## 4. JustCore — dados-mestre
 
-- `prisma/schema.prisma` — provider `sqlite`. **Modelos**: `Empresa`, `Cargo`, `Obra`,
+- `prisma/schema.prisma` — provider `postgresql`. **Modelos**: `Empresa`, `Cargo`, `Obra`,
   `Colaborador`, `BiometriaDigital`, `Alocacao`, `Fornecedor`, `Setor`, `Indicador`, `Insumo`,
-  `TipoDocumento`, `Documento`, `Veiculo`, `CustoCargo`.
+  `TipoDocumento`, `Documento`, `Veiculo`, `CustoCargo`, `Cliente`, `Unidade`,
+  `FormularioTipo`, `FormularioGrupo`, `FormularioModelo`, `FormularioInstancia` (motor de
+  formulários — ver seção 14), + controle de acesso (`Usuario`/`Perfil`/`Permissao`/`LogAcesso`).
+  - `Cliente` = comprador do imóvel. `Unidade` = unidade física entregável (apartamento |
+    area_comum | garagem | fachada | pavimento), ligada a `Obra`→bloco→pavimento; `sublocais`
+    em JSON. Base do módulo de Vistoria & Entrega (consumida pelo JustVistoria e pelo futuro
+    JustAssistencia). Semeada pelo importador do cronograma Prevision. Rotas `/api/clientes` e
+    `/api/unidades` (permissão `core.cadastro`).
   - `CustoCargo` = custo mensal por cargo (salário + encargos + provisões), versionado por
     `competencia` (YYYY-MM). custo/hora = `custo_mensal / jornada_horas` (220). Referência usada
     por Frota (custo do motorista), Obras (mão de obra) e RH. Rota `/api/custos-cargo`;
@@ -414,3 +422,76 @@ Telas e rotas não mudam ao trocar de driver. O arquivo **nunca** fica no VPS em
   via `GET /api/documentos/:id/download` → back-end **checa perfil + loga acesso** → faz
   stream do Graph. Política de retenção via `retido_ate`.
 - **Não sensível** (foto de obra): pode usar `sp_web_url`/link direto (mais leve).
+
+## 13. JustVistoria — vistoria & entrega de obra (back 4800 / front 4801)
+
+App de **checklist e entrega de apartamentos** (pós-construção). Mesmo padrão JustFrota/
+JustAtestados (Express+Prisma 7/Postgres; front React 19/Vite/Tailwind v4/React Query; auth do
+Core via `api-base`+`LoginGate`). **Cadastro (Cliente/Unidade/Obra/Colaborador) vem do Core**;
+guarda só transações. Pensado para **reuso pelo futuro JustAssistencia** (pós-entrega): o motor
+de formulários/NC/agendamento/termo é genérico (sem FK ao domínio de vistoria).
+
+- **Pipeline por unidade** (`EtapaUnidade`+`ItemEtapa`): Construção → Inspeção Final → Vistoria
+  do Cliente → Entrega das Chaves; situação, previsto×realizado, agendamentos.
+- **Motor de formulários** (`FormularioModelo` versionado + `FormularioInstancia`): checklist
+  FVC (seed) por grupos/itens (conforme/NC/NA + foto + obs). Segue `qualidade-fvs`.
+- **Não-conformidade / pendência** (`NaoConformidade`, registro único): fluxo abertura→
+  análise→ação→reverificação. **Crítica** abre **tratativa** (tipo, causa raiz, ações — plano de
+  qualidade) e **bloqueia** a entrega de chaves; **baixa/média/alta** = **pendência** categorizada
+  por disciplina (`categoria`) e distribuída a uma `equipe`. Campos: `origem` (construcao|
+  inspecao_final|vistoria_cliente|manual), `categoria`, `equipe`, `tipo`, `causa_raiz`, `acoes`,
+  `dias_resolucao`, `fotos` (JSON com 1+ docs do GED). Pendência também pode ser **lançada
+  manualmente** na fase de Construção. A **Lista de Pendências** (front) agrupa por disciplina
+  para gestão/distribuição.
+- **Evidência fotográfica**: 1+ fotos por item de verificação / NC, enviadas via `POST /api/fotos`
+  (multi-upload → GED, `tipo_codigo=foto_nc_vistoria`); a instância/NC guarda os `doc_id`.
+- **Termo** (`Termo`): vistoria (aceite × aceite com ressalvas) e entrega de chaves (itens
+  entregues). **Assinatura em tela** (canvas), **hash SHA-256**, PDF (jsPDF no front) → **GED do
+  Core** (`tipo_codigo` `termo_vistoria_cliente`/`termo_entrega_chaves`; relatório
+  `relatorio_entrega_unidade`), vínculo `entidade_tipo=unidade`.
+- **Cronograma Prevision** (`CronogramaTarefa`): fonte trocável (`CsvFonte` hoje,
+  `PrevisionApiFonte` no futuro) em `server/lib/cronograma.ts` + `prisma/import-prevision.ts`
+  (semeia obra+~80 unidades no Core e o cronograma no app). A etapa Construção e suas
+  **pendências** saem daí; o marco `CHE - CHECK LIST FINAL` por pavimento libera a Inspeção
+  Final. Ver `docs/integracao-prevision.md`.
+- **Rotas** (4800, `requireAuth`): `/api/health`, `/api/formulario-modelos`,
+  `/api/unidades/:id/{iniciar,etapas,construcao,relatorio,relatorio/arquivar}`,
+  `/api/etapas/:id`, `/api/itens`, `/api/instancias`, `/api/fotos` (multi-upload→GED),
+  `/api/ncs` (GET com filtros `severidade=pendencia|critica`/`categoria`/`abertas=1`; POST cria
+  pendência manual; +`/:id/reverificar`), `/api/termos`. Permissões `vistoria.read|write|aprovar`
+  (perfil `vistoriador`).
+- **Deploy** (pendente, Fase 6): + entrada no `gateway` (porta interna 4800) e static site
+  `just-vistoria-web` (`VITE_API_PREFIX=/vistoria`) no `render.yaml`; banco Neon `justvistoria`;
+  card no JustHub. Migration aditiva `clientes`/`unidades` no Neon `justcore`.
+
+## 14. Motor de Formulários — base de cadastro transversal (no Core)
+
+**Tese (ver skill `motor-formularios`):** formulário não se codifica tela a tela — cria-se um
+**template** versionado e o sistema renderiza/preenche/valida/arquiva genericamente, reusado por
+TODOS os apps (vistoria, FVS, EPI, clima, triagem, assistência). Mora no **Core**, como o GED.
+
+- **Modelos (Core `prisma/schema.prisma`)**: `FormularioTipo` (catálogo de tipos: FVE/FVS/AVF…),
+  `FormularioGrupo` (grupos de inspeção/disciplinas), `FormularioModelo` (template versionado —
+  `codigo` lógico + `versao`; `escopo` do app; `entidade_alvo`; `config` JSON com *avaliados* e
+  *comportamento*; `estrutura` JSON = seções→itens, cada item com `resposta.tipo`, `peso`,
+  `gera_nc`), `FormularioInstancia` (preenchimento polimórfico `entidade_tipo`+`entidade_id` que
+  **congela** `modelo_versao`/`modelo_codigo`; `respostas` JSON; `nota`; `total_nc`; `assinaturas`).
+  JSON guardado como `String` (padrão do Core).
+- **Tipos de resposta** (no JSON, portáveis): `sim_nao_na`, `booleano`, `texto`, `numero`, `nota`,
+  `data`, `selecao_simples`/`selecao_multipla`, `foto`/anexo (→GED), `assinatura`. Item pode
+  `permite_na`, `exige_justificativa_na`, `peso` e `gera_nc` (abre NC pelo fluxo comum).
+- **Rotas (Core 4100)**: catálogo via `registerCrud` (`/api/formulario-tipos`,
+  `/api/formulario-grupos`, perm `core.cadastro`); templates/instâncias em `server/formularios.ts`:
+  `GET/POST /api/formularios`, `GET/PUT /api/formularios/:id`, `:id/{publicar,nova-versao,duplicar}`,
+  `DELETE /api/formularios/:id` (bloqueia se tiver instância); `GET/POST /api/formularios/instancias`,
+  `GET/PUT /api/formularios/instancias/:id`. **Versionar é a regra**: editar a `estrutura` de um
+  modelo já aplicado → 409 (use nova versão). Permissões `formularios.read|write`.
+- **Builder (Core front)**: `src/views/FormulariosView.tsx` — lista → cadastro (tipo/grupo/escopo/
+  avaliados/comportamento) → itens (seções) → manutenção do item (tipo de resposta, instruções,
+  pesos, gera-NC). Espelha as telas do Mobuss. Tipos/Grupos também no admin (`entities.tsx`).
+- **Seed**: `prisma/seed-formularios.ts` (`npm run db:seed-formularios`) — tipos, grupos e
+  **promove o checklist FVC** do JustVistoria como modelo do Core (escopo `vistoria`, alvo `unidade`).
+- **Adoção incremental**: JustVistoria é o 1º consumidor (passa a referenciar o `modelo_id` do
+  Core em vez do modelo local) → FVS/qualidade → EPI → surveys. O `<FormRenderer schema>` (front
+  compartilhado) lê o JSON e monta a tela. Migration aditiva `20260625140000_motor_formularios`
+  no Neon `justcore` (4 tabelas novas).

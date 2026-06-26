@@ -43,32 +43,30 @@ a identificação funcionar.
    campo **messages**.
 6. Mande um WhatsApp do seu celular para o número de teste → cai no `POST /webhook`.
 
-## Status do teste (jun/2026) e como retomar
+## Status do teste (jun/2026) — FUNCIONANDO via Render
 
-**Provado e funcionando** (validado injetando o payload real da Meta pelo túnel):
-- ✅ Envio (Cloud API): `hello_world` chegou no celular; token + Phone Number ID OK.
-- ✅ Recebimento → identificação no Core (match BR pelos últimos 8 dígitos) → resposta.
-- ✅ Normalização do nº BR no envio (`normalizeBr`: recompõe o 9 que o `wa_id` perde).
-- ✅ Webhook `GET` (verificação) e `POST` testados localmente e pelo túnel.
+✅ **Ciclo completo provado** (envio + recebimento + resposta) com o JustGate rodando no
+**gateway do Render** (`https://just-gateway.onrender.com`, rota `/gate`). Um WhatsApp do
+celular cadastrado cai no webhook, é identificado no Core e recebe resposta.
 
-**Bloqueio (lado Meta, não código):** o registro do webhook no painel não se concretizou.
-A Meta **recebe** as mensagens (aparecem no visualizador do painel) mas **não entrega** na
-nossa URL. Causa provável: o **novo fluxo guiado** ("Casos de uso → Personalizar") + o aviso
-de que **app não publicado** só recebe webhooks de teste — e **publicar exige verificação de
-empresa** (documentos, dias).
+**Webhook no painel da Meta (config que vale):**
+- **URL de callback** = `https://just-gateway.onrender.com/gate/webhook` (NÃO o túnel
+  `trycloudflare` — aquele é efêmero e morre; era a causa de "não chega resposta").
+- **Verificar token** = o `WA_VERIFY_TOKEN` configurado no Render (`just-gate-verify`).
+- **Campos do webhook:** assinar **`messages`**.
 
-**Caminho limpo para retomar (recomendado):**
-1. **Deploy do JustGate no VPS** com **URL HTTPS fixa** (subdomínio) — acaba com o túnel
-   efêmero (`trycloudflare` muda de URL a cada execução). O webhook passa a ser configurado
-   **uma vez** e fica.
-2. **Verificação de empresa** na Meta (necessária de qualquer forma para produção e para o
-   número real) → publicar o app.
-3. Então no painel: **Callback URL** = `https://<dominio-justgate>/webhook`, **Verify token**
-   = `WA_VERIFY_TOKEN`, e **assinar o campo `messages`**.
-4. Token permanente via **System User** (não o de 24h).
+> ⚠️ **Se parar de responder, suspeite PRIMEIRO da URL de callback.** Se algum dia alguém
+> reabrir um túnel `trycloudflare`/`ngrok` e reapontar o webhook, a URL muda e tudo some.
+> A URL boa é a do Render (fixa). Confira em WhatsApp → Configuração → Configurar webhooks.
 
-Enquanto isso, o desenvolvimento do roteamento/integração segue com **payloads simulados**
-(POST no `/webhook`), que exercitam toda a lógica sem depender da Meta.
+**Limite atual (lado Meta):** o app **ainda não está publicado**, então só números que são
+**admin/dev/testador** do app recebem webhooks de teste. Para valer pra qualquer colaborador,
+**publicar o app** → exige **verificação da empresa** na Meta.
+
+**Para produção:** token permanente via **System User** (não o de 24h) no `WA_TOKEN` do Render.
+
+Para desenvolver o roteamento sem depender da Meta, ainda dá pra usar **payloads simulados**
+(POST no `/webhook`) ou o simulador do painel (`/simular`).
 
 ## Produção (depois)
 

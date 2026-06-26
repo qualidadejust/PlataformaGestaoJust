@@ -37,6 +37,10 @@ function montarPrompt(entidade_tipo: string, tipos: { codigo: string; nome: stri
     pessoa,
     `- confianca: "alta", "media" ou "baixa".`,
     `- resumo: uma frase curta (pt-BR) descrevendo o documento.`,
+    `- dados_extraidos: objeto com os campos ESPECÍFICOS do tipo, para pré-preencher o lançamento.`,
+    `  Preencha SÓ o que se aplicar e existir no documento; deixe "" o que não se aplica:`,
+    `  • Atestado/declaração médica → cid, dias_afastamento, horas, data_inicio (YYYY-MM-DD).`,
+    `  • Treinamento/certificado → data_realizacao (YYYY-MM-DD), vencimento (YYYY-MM-DD), instrutor, carga_horaria.`,
   ].join("\n");
 }
 
@@ -82,6 +86,20 @@ export function registerTriagem(app: Express, perm: (chave: string) => RequestHa
           colaborador_nome: { type: "STRING" },
           confianca: { type: "STRING", enum: ["alta", "media", "baixa"] },
           resumo: { type: "STRING" },
+          // campos específicos por tipo, para pré-preencher o lançamento no app dono (ponte)
+          dados_extraidos: {
+            type: "OBJECT",
+            properties: {
+              cid: { type: "STRING" },
+              dias_afastamento: { type: "STRING" },
+              horas: { type: "STRING" },
+              data_inicio: { type: "STRING" },
+              data_realizacao: { type: "STRING" },
+              vencimento: { type: "STRING" },
+              instrutor: { type: "STRING" },
+              carga_horaria: { type: "STRING" },
+            },
+          },
         },
         required: ["tipo_codigo", "sensivel", "confianca", "resumo"],
       };
@@ -112,6 +130,12 @@ export function registerTriagem(app: Express, perm: (chave: string) => RequestHa
         (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.socket.remoteAddress || undefined;
       await logAcesso(u?.sub ?? null, "triagem_ia", { recurso: "ged.documento", ip });
 
+      // limpa os campos vazios que a IA devolve "" (deixa só o que detectou de verdade)
+      const dados_extraidos: Record<string, string> = {};
+      for (const [k, v] of Object.entries((ia.dados_extraidos as Record<string, unknown>) ?? {})) {
+        if (typeof v === "string" && v.trim()) dados_extraidos[k] = v.trim();
+      }
+
       res.json({
         arquivo,
         entidade_tipo,
@@ -120,6 +144,7 @@ export function registerTriagem(app: Express, perm: (chave: string) => RequestHa
         valido_ate: (ia.valido_ate as string) || "",
         confianca: ia.confianca ?? "baixa",
         resumo: ia.resumo ?? "",
+        dados_extraidos,
         colaborador_id,
         colaborador_nome,
         match,

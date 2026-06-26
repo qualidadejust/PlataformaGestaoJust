@@ -72,12 +72,12 @@ async function main() {
   const empresaIdPorCnpj = new Map<string, string>();
   const empresasCore = await prisma.empresa.findMany();
   // mapa: razão social atual (que hoje é o NomeCCusto) -> empresa Core
-  const coreByNome = new Map(empresasCore.map((e) => [norm(e.razao_social), e]));
+  const coreByNome = new Map(empresasCore.map((e: any) => [norm(e.razao_social), e]));
 
   for (const [cnpj, info] of empresasCsv) {
     // tenta achar uma empresa Core cujo nome atual corresponda a algum NomeCCusto desse CNPJ
     const nomesDoCnpj = rows.filter((r) => r.cnpj === cnpj).map((r) => norm(r.nome));
-    const existente = empresasCore.find((e) => nomesDoCnpj.includes(norm(e.razao_social)));
+    const existente = empresasCore.find((e: any) => nomesDoCnpj.includes(norm(e.razao_social)));
     if (existente) {
       const upd = await prisma.empresa.update({
         where: { id: existente.id },
@@ -97,7 +97,7 @@ async function main() {
   // match por cost_center atual (que hoje guarda o NomeCCusto) ou pelo nome da obra
   function acharObra(nomeCC: string) {
     const n = norm(nomeCC);
-    return obrasCore.find((o) => norm(o.cost_center || "") === n || norm(o.nome) === n);
+    return obrasCore.find((o: any) => norm(o.cost_center || "") === n || norm(o.nome) === n);
   }
 
   let obrasAtualizadas = 0;
@@ -137,8 +137,8 @@ async function main() {
   let cargosMesclados = 0;
   const cargos = await prisma.cargo.findMany();
   for (const m of merges) {
-    const from = cargos.find((c) => norm(c.nome) === norm(m.from));
-    const to = cargos.find((c) => norm(c.nome) === norm(m.to));
+    const from = cargos.find((c: any) => norm(c.nome) === norm(m.from));
+    const to = cargos.find((c: any) => norm(c.nome) === norm(m.to));
     if (from && to && from.id !== to.id) {
       await prisma.colaborador.updateMany({ where: { cargo_id: from.id }, data: { cargo_id: to.id } });
       await prisma.cargo.delete({ where: { id: from.id } });

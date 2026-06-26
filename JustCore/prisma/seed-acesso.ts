@@ -24,6 +24,11 @@ const PERMISSOES: [string, string][] = [
   ["atestados.read", "Ver atestados/declarações"],
   ["atestados.write", "Lançar atestado/declaração (apontador)"],
   ["atestados.aprovar", "Aprovar/recusar atestado (RH)"],
+  ["vistoria.read", "Ver vistorias/entregas de unidade"],
+  ["vistoria.write", "Lançar etapas/itens/checklist/termos da vistoria"],
+  ["vistoria.aprovar", "Aprovar etapa e liberar entrega (gestor de entrega)"],
+  ["formularios.read", "Ver formulários (modelos e preenchimentos)"],
+  ["formularios.write", "Criar/editar/publicar formulários e instâncias (motor)"],
   ["acesso.admin", "Gerenciar usuários e perfis"],
 ];
 
@@ -32,9 +37,10 @@ const PERFIS: Record<string, string[]> = {
   admin: ["*"],
   rh: ["core.cadastro.read", "core.cadastro.write", "core.sensivel.read", "eleva.read", "eleva.write", "ged.documento.read", "ged.sensivel.read", "atestados.read", "atestados.write", "atestados.aprovar"],
   sst: ["security.read", "security.write", "ged.documento.read", "ged.sensivel.read", "core.cadastro.read"],
-  qualidade: ["ged.documento.read", "ged.documento.write", "core.cadastro.read"],
-  gestor_obra: ["frota.read", "core.cadastro.read", "eleva.read", "ged.documento.read"],
+  qualidade: ["ged.documento.read", "ged.documento.write", "core.cadastro.read", "formularios.read", "formularios.write"],
+  gestor_obra: ["frota.read", "core.cadastro.read", "eleva.read", "ged.documento.read", "vistoria.read", "vistoria.aprovar", "formularios.read"],
   apontador: ["atestados.read", "atestados.write", "core.cadastro.read"],
+  vistoriador: ["vistoria.read", "vistoria.write", "core.cadastro.read", "core.cadastro.write", "ged.documento.read", "ged.documento.write", "formularios.read", "formularios.write"],
   leitura: PERMISSOES.map(([k]) => k).filter((k) => k.endsWith(".read")),
 };
 

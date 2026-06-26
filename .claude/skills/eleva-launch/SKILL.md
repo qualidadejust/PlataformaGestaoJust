@@ -1,10 +1,10 @@
 ---
-name: launch
-description: Use this skill when the user says "inicia o servidor", "start the app", "npm run dev", "sobe o servidor", or when /run needs to launch JustAvaliacoes. Starts frontend (port 3000) + backend (port 3001) via concurrently in a new PowerShell window, then smoke-tests both ports.
+name: eleva-launch
+description: Sobe o JustEleva (frontend Vite porta 3000 + backend Express porta 3001 via concurrently) numa nova janela PowerShell e faz smoke-test das duas portas. ESPECÍFICO do JustEleva — use só ao iniciar este app. Para os outros apps do monorepo, cada um sobe isolado com suas próprias portas (`cd <app>; npm run dev`).
 version: 1.0.0
 ---
 
-# Launch — JustAvaliacoes
+# Launch — JustEleva
 
 Inicia frontend (Vite, porta 3000) + backend (Express, porta 3001) juntos.
 
@@ -15,7 +15,7 @@ Inicia frontend (Vite, porta 3000) + backend (Express, porta 3001) juntos.
 ```powershell
 Start-Process -FilePath "powershell.exe" `
   -ArgumentList "-NoExit","-Command","npm run dev" `
-  -WorkingDirectory "C:\Users\samu_\Documents\JustAvaliacoes\app"
+  -WorkingDirectory "C:\Users\samu_\Documents\PlataformaGestao\JustEleva\app"
 ```
 
 Isso abre uma nova janela. Feche-a para parar os servidores.

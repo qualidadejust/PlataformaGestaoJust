@@ -1,6 +1,6 @@
 ---
-name: caveman
-description: Use this skill when the user says "caveman", "debug caveman", "check connections", "verificar conexões", or when data is not loading from the API/database. Provides a primitive but effective diagnostic checklist to verify that the frontend is receiving real data from the backend instead of hardcoded mockup values.
+name: eleva-caveman
+description: Diagnóstico de conexão front↔back ESPECÍFICO do JustEleva (portas 3000/3001, hooks/views do app em JustEleva/app). Use ao trabalhar no JustEleva quando o usuário disser "caveman", "verificar conexões" ou os dados não carregarem da API. NÃO use para os outros apps do monorepo — cada um tem suas próprias portas.
 version: 1.0.0
 ---
 

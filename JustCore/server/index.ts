@@ -5,6 +5,8 @@ import { prisma } from "./lib/prisma.ts";
 import { extractTemplate, biometriaOnline } from "./lib/biometria.ts";
 import { registerDocumentos } from "./documentos.ts";
 import { registerTriagem } from "./triagem.ts";
+import { registerGate } from "./gate.ts";
+import { registerFormularios } from "./formularios.ts";
 import { registerAuth } from "./auth.ts";
 import { registerAcessos } from "./acessos.ts";
 import { requireAuth, requirePerm } from "./lib/auth.ts";
@@ -139,6 +141,13 @@ registerCrud("indicadores", "indicador", { orderBy: { nome: "asc" }, perm: "core
 registerCrud("tipos-documento", "tipoDocumento", { orderBy: { nome: "asc" }, perm: "core.cadastro" });
 registerCrud("veiculos", "veiculo", { include: { empresa: true }, orderBy: { identificacao: "asc" }, perm: "core.cadastro" });
 registerCrud("custos-cargo", "custoCargo", { orderBy: { cargo: "asc" }, perm: "core.cadastro" });
+// Vistoria & Entrega: cadastro-mestre (comprador + unidade física). Transações ficam no JustVistoria.
+registerCrud("clientes", "cliente", { orderBy: { nome: "asc" }, perm: "core.cadastro" });
+registerCrud("unidades", "unidade", { include: { obra: true, cliente: true }, orderBy: { identificador: "asc" }, perm: "core.cadastro" });
+
+// ---- Motor de formulários (base transversal) — catálogo simples + módulo de templates/instâncias ----
+registerCrud("formulario-tipos", "formularioTipo", { orderBy: { nome: "asc" }, perm: "core.cadastro" });
+registerCrud("formulario-grupos", "formularioGrupo", { orderBy: { nome: "asc" }, perm: "core.cadastro" });
 
 // ---- Biometria (cadastro de digitais do colaborador) ----
 app.get("/api/biometria/health", async (_req, res) => {
@@ -209,6 +218,12 @@ registerDocumentos(app, perm);
 
 // ---- Triagem por IA (Gemini): lê o arquivo e PROPÕE a classificação no GED (não grava) ----
 registerTriagem(app, perm);
+
+// ---- JustGate (WhatsApp): proposta pendente → confirma → grava na fila de análise do GED ----
+registerGate(app, perm);
+
+// ---- Motor de formulários: templates versionados + instâncias (consumido por todos os apps) ----
+registerFormularios(app, perm);
 
 const PORT = 4100;
 app.listen(PORT, () => console.log(`JustCore (dados-mestre) rodando em http://localhost:${PORT}`));

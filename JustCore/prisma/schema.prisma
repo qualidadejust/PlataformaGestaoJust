@@ -65,6 +65,7 @@ model Obra {
 
   empresa   Empresa?   @relation(fields: [empresa_id], references: [id], onDelete: SetNull)
   alocacoes Alocacao[]
+  unidades  Unidade[]
 
   @@map("obras")
 }
@@ -318,6 +319,9 @@ model Documento {
   versao         Int      @default(1)
   status         String   @default("vigente") // vigente | substituido | obsoleto | vencido
   valido_ate     String? // data de validade (ASO/licença/alvará) -> alerta
+  // canal de entrada + fila de conferência (ex.: documentos que chegam pelo WhatsApp/JustGate)
+  origem         String? // upload | whatsapp | ... (de onde veio o documento)
+  analise        String? // null = já efetivado | pendente | aprovado | rejeitado (fila de análise no JustDocs)
   // ponteiro para o storage
   storage_driver String   @default("local") // local | sharepoint
   sp_drive_id    String? // Graph driveId (sharepoint)
@@ -334,7 +338,85 @@ model Documento {
   @@index([tipo_codigo])
   @@index([natureza])
   @@index([setor])
+  @@index([analise])
   @@map("documentos")
+}
+
+/// Triagem pendente do JustGate (WhatsApp). Quando um colaborador manda foto/PDF pelo zap, a
+/// IA classifica e PROPÕE o lançamento; guardamos aqui o que foi detectado e esperamos o
+/// colaborador CONFIRMAR (botão no WhatsApp). LGPD: o arquivo só é gravado no GED após o
+/// confirmar — até lá fica só o `media_id` da Meta (re-baixado na confirmação). `message_id`
+/// garante idempotência (a Meta reenvia o webhook). Ver skill `justgate-whatsapp`.
+model TriagemPendente {
+  id               String   @id @default(uuid())
+  telefone         String // E.164 de quem mandou (já identificado no Core)
+  colaborador_id   String // dono do documento (= quem mandou); sem isto não cria pendente
+  colaborador_nome String
+  media_id         String // id da mídia na Cloud API (re-baixado no confirmar)
+  arquivo          String // nome do arquivo detectado
+  entidade_tipo    String   @default("colaborador")
+  tipo_codigo      String? // classificação proposta (TipoDocumento.codigo)
+  destino          String   @default("ged") // ged | atestados | treinamento — para onde a ponte leva
+  sensivel         Boolean  @default(false)
+  valido_ate       String?
+  dados_extraidos  String   @default("{}") // JSON: campos do tipo (cid/dias | instrutor/vencimento...)
+  resumo           String?
+  confianca        String?
+  message_id       String   @unique // idempotência do webhook da Meta
+  status           String   @default("aguardando") // aguardando | confirmado | cancelado | expirado
+  doc_id           String? // documento gerado no GED após confirmar
+  expira_em        DateTime
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+
+  @@index([telefone])
+  @@index([status])
+  @@map("triagem_pendentes")
+}
+
+/// ----------------------------------------------------------------------------
+/// CLIENTE / UNIDADE — base do módulo de Vistoria & Entrega (consumida pelo JustVistoria
+/// e, no futuro, pelo JustAssistencia). Cadastro-mestre: a unidade física e o comprador.
+/// As transações (etapas, checklist, NCs, termos) ficam no app e referenciam estes IDs +
+/// snapshot. Ver skill `vistoria-entrega` e seção 13 do resumo.
+/// ----------------------------------------------------------------------------
+model Cliente {
+  id         String   @id @default(uuid())
+  nome       String
+  cpf        String?
+  email      String?
+  telefone   String?
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  unidades Unidade[]
+
+  @@map("clientes")
+}
+
+/// Unidade física entregável: apartamento (vendável) ou local comum (área comum, garagem,
+/// fachada, pavimento). Amarra à Obra do Core → bloco → pavimento → unidade. `sublocais` é
+/// JSON serializado (quarto/suíte/sacada…). Semeada pelo importador do cronograma Prevision.
+model Unidade {
+  id            String   @id @default(uuid())
+  obra_id       String
+  cliente_id    String? // comprador (nulo até vender)
+  categoria     String   @default("apartamento") // apartamento | area_comum | garagem | fachada | pavimento
+  bloco         String?
+  pavimento     String?
+  identificador String // rótulo legível: "BL 07 - APTO 41" | "APTO 204"
+  codigo        String? // código do local (estilo Mobuss): "01.07.04.041"
+  sublocais     String? // JSON: [{nome:"Suíte", tipo:"suite"}, ...]
+  area_m2       Float?
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  obra    Obra     @relation(fields: [obra_id], references: [id], onDelete: Cascade)
+  cliente Cliente? @relation(fields: [cliente_id], references: [id], onDelete: SetNull)
+
+  @@index([obra_id])
+  @@index([cliente_id])
+  @@map("unidades")
 }
 
 /// ----------------------------------------------------------------------------
@@ -431,4 +513,108 @@ model LogAcesso {
   @@index([usuario_id])
   @@index([created_at])
   @@map("logs_acesso")
+}
+
+/// ----------------------------------------------------------------------------
+/// MOTOR DE FORMULÁRIOS (base de cadastro transversal — como o GED).
+/// Template versionado (`FormularioModelo`) + preenchimento (`FormularioInstancia`),
+/// consumido por TODOS os apps (vistoria, FVS, EPI, clima, triagem…). O `schema`/`config`
+/// são JSON (String, padrão do Core) — formulário novo é DADO, não tela em código.
+/// Ver skill `motor-formularios` e seção 14 do resumo.
+/// ----------------------------------------------------------------------------
+
+/// Tipo de formulário (catálogo): FVS, Vistoria & Entrega, Avaliação de Fornecedor…
+model FormularioTipo {
+  id               String   @id @default(uuid())
+  codigo           String   @unique // slug estável: fvs | fve | avf | clima ...
+  nome             String
+  sigla            String?
+  descricao        String?
+  categoria        String? // Inspeção | Avaliação de Fornecedores | Qualificação | Survey ...
+  titulo_relatorio String?
+  ativo            Boolean  @default(true)
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+
+  modelos FormularioModelo[]
+
+  @@map("formulario_tipos")
+}
+
+/// Grupo de inspeção / disciplina (Geral, Estruturas, Instalações, Acabamentos…).
+model FormularioGrupo {
+  id         String   @id @default(uuid())
+  codigo     String   @unique
+  nome       String
+  sigla      String?
+  descricao  String?
+  ativo      Boolean  @default(true)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  modelos FormularioModelo[]
+
+  @@map("formulario_grupos")
+}
+
+/// Template do formulário (versionado). `codigo` é a chave lógica (versões compartilham);
+/// nunca edite um modelo já APLICADO — gere nova versão. `estrutura` = seções→itens.
+model FormularioModelo {
+  id            String   @id @default(uuid())
+  codigo        String // chave lógica do formulário (ex.: "FVC"); versões compartilham
+  nome          String
+  descricao     String?
+  cabecalho     String?
+  tipo_id       String?
+  grupo_id      String?
+  escopo        String   @default("geral") // app/módulo: vistoria | fvs | epi | clima | geral
+  entidade_alvo String? // a que entidade a instância se amarra: unidade | obra | colaborador ...
+  revisao       String? // revisão documental do SGQ (ex.: "F-102")
+  versao        Int      @default(1)
+  ativo         Boolean  @default(true)
+  publicado     Boolean  @default(false) // rascunho × publicado (só publicado é aplicável)
+  dias_validade Int?
+  config        String? // JSON: { avaliados:{local:{informar,obrigar},...}, comportamento:{assina_responsavel,assina_avaliado,exibe_nota,calculo_nota} }
+  estrutura     String   @default("[]") // JSON: [{ secao, ordem, itens:[{ ordem, descricao, instrucoes, peso, resposta:{tipo,rotulo,opcoes,permite_na,exige_justificativa_na}, gera_nc:{...} }] }]
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  tipo       FormularioTipo?       @relation(fields: [tipo_id], references: [id])
+  grupo      FormularioGrupo?      @relation(fields: [grupo_id], references: [id])
+  instancias FormularioInstancia[]
+
+  @@index([codigo])
+  @@index([escopo])
+  @@index([tipo_id])
+  @@map("formulario_modelos")
+}
+
+/// Preenchimento de um formulário (congela a versão do modelo). Polimórfico
+/// (entidade_tipo+entidade_id), serve a qualquer app. Anexos/fotos → GED (guarda doc_id).
+model FormularioInstancia {
+  id             String    @id @default(uuid())
+  modelo_id      String
+  modelo_codigo  String
+  modelo_versao  Int
+  escopo         String? // herdado do modelo (filtra por app)
+  entidade_tipo  String? // unidade | obra | colaborador | entrega_epi ...
+  entidade_id    String?
+  entidade_label String?
+  respostas      String    @default("[]") // JSON: [{ secao, item, tipo, valor, status, obs, fotos:[docId] }]
+  nota           Float?
+  total_nc       Int       @default(0)
+  resumo         String? // JSON livre (ex.: { por_secao, criticas })
+  autor_id       String?
+  autor_nome     String?
+  assinaturas    String? // JSON: { responsavel:{nome,img,em}, avaliado:{nome,img,em} }
+  preenchido_em  DateTime?
+  created_at     DateTime  @default(now())
+  updated_at     DateTime  @updatedAt
+
+  modelo FormularioModelo @relation(fields: [modelo_id], references: [id])
+
+  @@index([modelo_id])
+  @@index([escopo])
+  @@index([entidade_tipo, entidade_id])
+  @@map("formulario_instancias")
 }
