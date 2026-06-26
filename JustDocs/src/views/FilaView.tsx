@@ -78,7 +78,8 @@ function appUrl(name: string): string | null {
   if (!u.includes(".")) u = `${u}.onrender.com`;
   return `https://${u}`;
 }
-const ATESTADOS_URL = appUrl("VITE_URL_ATESTADOS");
+// Usa a var do render.yaml; com fallback fixo para não depender de sync de blueprint.
+const ATESTADOS_URL = appUrl("VITE_URL_ATESTADOS") ?? "https://just-atestados-web.onrender.com";
 
 export default function FilaView() {
   const qc = useQueryClient();
