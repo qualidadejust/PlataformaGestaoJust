@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { GraduationCap, BookOpen, CalendarDays, ClipboardCheck, CalendarRange } from "lucide-react";
 import { cn } from "./lib/cn.ts";
 import TreinamentosView from "./views/TreinamentosView.tsx";
@@ -7,14 +7,24 @@ import TurmaDetalheView from "./views/TurmaDetalheView.tsx";
 import CertificadoView from "./views/CertificadoView.tsx";
 import MatrizView from "./views/MatrizView.tsx";
 import CalendarioView from "./views/CalendarioView.tsx";
+import FinalizarExternoView from "./views/FinalizarExternoView.tsx";
 
 type Tab = "turmas" | "treinamentos" | "matriz" | "calendario";
 // Navegação simples por estado (padrão JustDocs): turmas → detalhe → certificado.
-type Tela = { v: "tabs" } | { v: "turma"; id: string } | { v: "cert"; id: string };
+type Tela = { v: "tabs" } | { v: "turma"; id: string } | { v: "cert"; id: string } | { v: "ged"; id: string };
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("turmas");
   const [tela, setTela] = useState<Tela>({ v: "tabs" });
+
+  // PONTE do JustDocs: ?ged=<docId> → finalizar treinamento externo a partir do certificado no GED.
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("ged");
+    if (id) {
+      window.history.replaceState({}, "", window.location.pathname);
+      setTela({ v: "ged", id });
+    }
+  }, []);
 
   const tabs: { id: Tab; label: string; icon: typeof BookOpen }[] = [
     { id: "turmas", label: "Turmas", icon: CalendarDays },
@@ -61,6 +71,7 @@ export default function App() {
           <TurmaDetalheView turmaId={tela.id} onBack={() => setTela({ v: "tabs" })} onCert={(id) => setTela({ v: "cert", id })} />
         )}
         {tela.v === "cert" && <CertificadoView participacaoId={tela.id} onBack={() => setTela({ v: "tabs" })} />}
+        {tela.v === "ged" && <FinalizarExternoView gedId={tela.id} onDone={() => setTela({ v: "tabs" })} />}
       </main>
     </div>
   );

@@ -86,6 +86,13 @@ function appUrl(name: string): string | null {
 }
 // Usa a var do render.yaml; com fallback fixo para não depender de sync de blueprint.
 const ATESTADOS_URL = appUrl("VITE_URL_ATESTADOS") ?? "https://just-atestados-web.onrender.com";
+const TRAIN_URL = appUrl("VITE_URL_TRAIN") ?? "https://just-train-web.onrender.com";
+
+// App-alvo da ponte por destino (abre <app>/?ged=<docId>).
+const PONTE: Record<string, { url: string; label: string } | undefined> = {
+  atestados: { url: ATESTADOS_URL, label: "Finalizar no JustAtestados" },
+  treinamento: { url: TRAIN_URL, label: "Finalizar no JustTrain" },
+};
 
 export default function FilaView() {
   const qc = useQueryClient();
@@ -214,14 +221,14 @@ function Card({
             >
               <UserPlus className="size-3.5" /> Criar colaborador
             </button>
-          ) : destino === "atestados" && ATESTADOS_URL ? (
+          ) : PONTE[destino] ? (
             <a
-              href={`${ATESTADOS_URL}/?ged=${doc.id}`}
+              href={`${PONTE[destino]!.url}/?ged=${doc.id}`}
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center gap-1.5 rounded-md bg-[#0f2742] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#163554] dark:bg-teal-600 dark:hover:bg-teal-500"
             >
-              <ExternalLink className="size-3.5" /> Finalizar no JustAtestados
+              <ExternalLink className="size-3.5" /> {PONTE[destino]!.label}
             </a>
           ) : (
             destino !== "ged" && (

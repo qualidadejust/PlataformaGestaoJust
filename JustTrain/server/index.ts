@@ -166,6 +166,73 @@ app.post("/api/turmas/:id/participantes", async (req, res) => {
   }
 });
 
+// PONTE (JustDocs): registra um treinamento EXTERNO de UMA pessoa a partir de um certificado
+// que já está no GED. Cria turma externa + participação declarada + amarra o certificado, e
+// tira o doc da fila de análise. "1 certificado = 1 registro". Ver skill justgate-whatsapp.
+const CORE_BASE_URL = process.env.CORE_URL ?? "http://127.0.0.1:4100";
+const INTERNAL_TK = () => process.env.INTERNAL_TOKEN ?? "";
+async function coreGet(path: string): Promise<any | null> {
+  try {
+    const r = await fetch(`${CORE_BASE_URL}${path}`, { headers: { "x-internal-token": INTERNAL_TK() }, signal: AbortSignal.timeout(5000) });
+    return r.ok ? await r.json() : null;
+  } catch { return null; }
+}
+async function gedAprovar(docId: string): Promise<void> {
+  try {
+    await fetch(`${CORE_BASE_URL}/api/documentos/${docId}/analise`, {
+      method: "POST",
+      headers: { "x-internal-token": INTERNAL_TK(), "Content-Type": "application/json" },
+      body: JSON.stringify({ acao: "aprovar" }),
+      signal: AbortSignal.timeout(5000),
+    });
+  } catch { /* ignora */ }
+}
+
+app.post("/api/treinamento-externo/from-ged", async (req, res) => {
+  try {
+    const b = req.body ?? {};
+    if (!b.treinamento_id || !b.colaborador_id || !b.data)
+      return res.status(400).json({ error: "treinamento, colaborador e data são obrigatórios" });
+    const t = await db.treinamento.findUnique({ where: { id: b.treinamento_id } });
+    if (!t) return res.status(400).json({ error: "treinamento não encontrado" });
+    const col = await coreGet(`/api/colaboradores/${b.colaborador_id}`);
+    const nome = col?.nome ?? b.colaborador_nome;
+    if (!nome) return res.status(400).json({ error: "colaborador não encontrado" });
+
+    const avaliarEm = new Date(b.data + "T00:00:00");
+    avaliarEm.setDate(avaliarEm.getDate() + 30);
+    const turma = await db.turma.create({
+      data: {
+        treinamento_id: t.id, treinamento_nome: t.nome, treinamento_codigo: t.codigo, tipo: t.tipo,
+        setor: t.setor, carga_horaria: t.carga_horaria, validade_meses: t.validade_meses,
+        data: b.data, origem: "externa", entidade_externa: b.entidade_externa ?? null,
+        instrutor: b.instrutor ?? null, status: "concluida",
+        eficacia_avaliar_em: avaliarEm.toISOString().slice(0, 10),
+      },
+    });
+
+    // vencimento do certificado: usa o detectado; senão data + validade_meses do treinamento.
+    let venc: string | null = b.vencimento || null;
+    if (!venc && t.validade_meses) {
+      const d = new Date(b.data + "T00:00:00");
+      d.setMonth(d.getMonth() + t.validade_meses);
+      venc = d.toISOString().slice(0, 10);
+    }
+    const p = await db.participacao.create({
+      data: {
+        turma_id: turma.id, colaborador_id: b.colaborador_id, colaborador_nome: nome,
+        colaborador_matricula: col?.matricula ?? null, colaborador_cargo: col?.cargo?.nome ?? null,
+        presente: true, assinatura_tipo: "declarado", assinado_em: new Date().toISOString(),
+        certificado_externo_id: b.ged_documento_id ?? null, certificado_valido_ate: venc,
+      },
+    });
+    if (b.ged_documento_id) await gedAprovar(String(b.ged_documento_id));
+    res.status(201).json({ turma_id: turma.id, participacao_id: p.id });
+  } catch (e) {
+    res.status(400).json({ error: String((e as Error).message) });
+  }
+});
+
 app.delete("/api/participacoes/:id", async (req, res) => {
   try {
     await db.participacao.delete({ where: { id: req.params.id } });
