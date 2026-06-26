@@ -121,6 +121,7 @@ export function registerDocumentos(app: Express, perm: (chave: string) => Reques
       const nomeArquivo = await montarNomeArquivo({
         original: nomeOriginal,
         tipo_codigo: tipo_codigo ?? null,
+        categoria,
         entidade_tipo,
         entidade_id,
         entidade_label,

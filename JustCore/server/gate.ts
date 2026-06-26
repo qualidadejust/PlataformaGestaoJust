@@ -152,6 +152,7 @@ export function registerGate(app: Express, perm: (chave: string) => RequestHandl
       const nomeArquivo = await montarNomeArquivo({
         original: nomeOriginal,
         tipo_codigo: pend.tipo_codigo,
+        categoria: pend.destino === "novo_colaborador" ? "admissao" : pend.tipo_codigo,
         entidade_tipo: entidadeTipo,
         entidade_id: entidadeId,
         entidade_label: entidadeLabel,

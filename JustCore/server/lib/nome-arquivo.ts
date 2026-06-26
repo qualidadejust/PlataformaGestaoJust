@@ -32,6 +32,7 @@ function carimbo(d = new Date()): string {
 export async function montarNomeArquivo(input: {
   original: string;
   tipo_codigo?: string | null;
+  categoria?: string | null; // fallback do tipo quando não há tipo_codigo (aso | projeto | foto…)
   entidade_tipo: string;
   entidade_id: string;
   entidade_label?: string | null;
@@ -60,7 +61,9 @@ export async function montarNomeArquivo(input: {
     partes.push(slug(label));
   }
 
-  if (input.tipo_codigo) partes.push(slug(input.tipo_codigo, 24));
+  // TIPO do documento — sempre presente: código do tipo (aso, atestado, certificado_treinamento,
+  // alvara…), senão a categoria, senão "DOC".
+  partes.push(slug(input.tipo_codigo || input.categoria || "doc", 24));
   partes.push(carimbo());
 
   const base = partes.filter(Boolean).join("_") || "DOCUMENTO";
