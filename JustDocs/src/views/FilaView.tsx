@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Inbox, Check, X, Download, Loader2, MessageCircle, ExternalLink } from "lucide-react";
 import { api } from "../lib/api.ts";
+import { abrirDoc } from "../api-base.ts";
 import { cn } from "../lib/cn.ts";
 
 // Fila de análise: documentos que chegaram pendentes de conferência (hoje, pelo WhatsApp via
@@ -135,14 +136,12 @@ function Card({ doc, onAnalisar }: { doc: Doc; onAnalisar: (id: string, a: "apro
       </div>
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-        <a
-          href={doc.download_url}
-          target="_blank"
-          rel="noreferrer"
+        <button
+          onClick={() => abrirDoc(doc.download_url)}
           className="inline-flex items-center gap-1.5 text-xs font-medium text-teal-700 hover:underline dark:text-teal-300"
         >
           <Download className="size-3.5" /> ver arquivo
-        </a>
+        </button>
         <div className="flex items-center gap-2">
           {destino !== "ged" && (
             <span
