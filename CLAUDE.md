@@ -27,6 +27,39 @@ verdade); os demais apps guardam **só as suas transações** e referenciam IDs 
 snapshot na hora). **Suba o JustCore primeiro.** Detalhes, portas e fluxo de biometria no
 resumo.
 
+## Workflow Git — obrigatório
+
+Repositório: `https://github.com/qualidadejust/PlataformaGestaoJust`
+Branch principal: `main`
+
+**Antes de qualquer mudança:**
+```bash
+git pull origin main          # sincroniza com o remoto
+```
+
+**Para cada tarefa/mudança:**
+1. Crie uma branch descritiva a partir da `main`:
+   ```bash
+   git checkout -b feat/nome-curto    # nova funcionalidade
+   git checkout -b fix/nome-curto     # correção de bug
+   git checkout -b chore/nome-curto   # ajuste técnico/docs
+   ```
+2. Faça os commits na branch (mensagens em inglês, breves e diretos):
+   ```bash
+   git add <arquivos>
+   git commit -m "tipo(escopo): descrição curta"
+   ```
+3. Ao terminar, abra um Pull Request para `main` (nunca commite direto na `main`):
+   ```bash
+   git push -u origin <branch>
+   gh pr create --title "título" --body "resumo da mudança"
+   ```
+
+**Regras de commit:**
+- Mensagens curtas e simples, condizentes com a mudança.
+- Nunca commite direto na `main`.
+- Um PR por tarefa/funcionalidade — mantenha o escopo fechado.
+
 ## Comandos (por app)
 
 Cada app roda isolado. Entre na pasta do app (`JustCore` | `JustEleva/app` | `JustSecurity`):
