@@ -157,6 +157,11 @@ for (const b of BACKENDS) {
   });
 }
 
-app.listen(GATEWAY_PORT, () =>
-  console.log(`Gateway na porta ${GATEWAY_PORT} (lazy) → ${BACKENDS.map((b) => b.name).join(", ")}`)
-);
+app.listen(GATEWAY_PORT, () => {
+  console.log(`Gateway na porta ${GATEWAY_PORT} (lazy) → ${BACKENDS.map((b) => b.name).join(", ")}`);
+  // O Core é dependência de TODOS (inclusive do JustGate, que o consulta ao receber um webhook do
+  // WhatsApp — chamada direta a 127.0.0.1:4100, que NÃO dispara o lazy-start). Subimos o Core já
+  // no boot para a 1ª mensagem após ociosidade (cold start do Render) não falhar.
+  const core = BACKENDS.find((b) => b.name === "core");
+  if (core) ensureStarted(core).catch((e) => console.error("[core] eager start falhou:", e?.message));
+});
