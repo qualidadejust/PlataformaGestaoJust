@@ -2,6 +2,7 @@
 // Compartilhado entre os fronts (depende de ./auth e do Tailwind do app).
 import { useState, type ReactNode, type FormEvent } from "react";
 import { useAuth } from "./auth.tsx";
+import { JustLogo } from "./components/JustLogo.tsx";
 
 function Campo(props: React.InputHTMLAttributes<HTMLInputElement> & { label: string }) {
   const { label, ...rest } = props;
@@ -20,8 +21,12 @@ function Cartao({ titulo, children }: { titulo: string; children: ReactNode }) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-100 p-4 dark:bg-slate-950">
       <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-8 shadow-lg dark:border-slate-800 dark:bg-slate-900">
-        <h1 className="mb-1 text-xl font-bold text-slate-900 dark:text-slate-100">Plataforma JUST</h1>
-        <p className="mb-6 text-sm text-slate-500 dark:text-slate-400">{titulo}</p>
+        <div className="mb-4 flex justify-center">
+          <JustLogo variant="navy" heightPx={40} className="dark:hidden" />
+          <JustLogo variant="white" heightPx={40} className="hidden dark:inline-flex" />
+        </div>
+        <h1 className="mb-1 text-center text-xl font-bold text-slate-900 dark:text-slate-100">Plataforma JUST</h1>
+        <p className="mb-6 text-center text-sm text-slate-500 dark:text-slate-400">{titulo}</p>
         {children}
       </div>
     </div>

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { FolderOpen, FileText, CalendarClock, FolderTree, Sparkles, Inbox, CalendarDays } from "lucide-react";
 import { cn } from "./lib/cn.ts";
+import { JustLogo } from "./components/JustLogo.tsx";
 import PastasView from "./views/PastasView.tsx";
 import DocumentosView from "./views/DocumentosView.tsx";
 import VencimentosView from "./views/VencimentosView.tsx";
@@ -24,6 +25,8 @@ export default function App() {
     <div className="min-h-screen bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-100">
       <header className="bg-[#0f2742] text-white">
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-5 py-4">
+          <JustLogo variant="white" heightPx={34} />
+          <span className="h-8 w-px bg-white/20" />
           <FileText className="size-6 text-teal-300" />
           <div>
             <h1 className="text-lg font-semibold leading-tight">JustDocs</h1>
