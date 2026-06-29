@@ -1,7 +1,9 @@
+import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import { createHash } from "node:crypto";
 import { prisma } from "./lib/prisma.ts";
+import { requireAuth, requirePerm } from "./lib/auth.ts";
 import { abrirFicha, statusFicha, registrarInspecao, baixarFicha } from "./ciclo.ts";
 import { verificarDigital, biometriaOnline, MATCH_THRESHOLD } from "./biometria.ts";
 
@@ -35,10 +37,16 @@ app.use(express.json({ limit: "8mb" }));
 
 app.get("/api/health", (_req, res) => res.json({ ok: true, service: "just-security" }));
 
+// A partir daqui exige auth (no-op em dev, sem AUTH_ENFORCE).
+app.use(requireAuth);
+
+const ler = requirePerm("security.read");
+const escrever = requirePerm("security.write");
+
 // Colaboradores e EPIs agora vêm do JustCore (a UI consome /core/api/... via proxy).
 
 // ---- Entregas (locais, com snapshot do Core) ----
-app.get("/api/entregas/verificacao", async (_req, res) => {
+app.get("/api/entregas/verificacao", ler, async (_req, res) => {
   const rows = await prisma.entregas.findMany({ orderBy: { id: "asc" } });
   let anterior = "GENESIS";
   const quebras: number[] = [];
@@ -50,11 +58,11 @@ app.get("/api/entregas/verificacao", async (_req, res) => {
   res.json({ ok: quebras.length === 0, total: rows.length, quebras });
 });
 
-app.get("/api/entregas", async (_req, res) => {
+app.get("/api/entregas", ler, async (_req, res) => {
   res.json(await prisma.entregas.findMany({ orderBy: { entregue_em: "desc" } }));
 });
 
-app.post("/api/entregas", async (req, res) => {
+app.post("/api/entregas", escrever, async (req, res) => {
   const b = req.body ?? {};
   if (!b.colaborador_nome || !b.epi_nome) {
     return res.status(400).json({ error: "colaborador e EPI são obrigatórios" });
@@ -149,7 +157,7 @@ app.post("/api/entregas", async (req, res) => {
 const HOJE = () => new Date().toISOString();
 
 // Lista de fichas com status calculado. Filtros: ?status=ativa&colaborador_id=&q=
-app.get("/api/fichas", async (req, res) => {
+app.get("/api/fichas", ler, async (req, res) => {
   const { status, colaborador_id, q } = req.query as Record<string, string>;
   const where: any = {};
   if (status) where.status = status;
@@ -161,7 +169,7 @@ app.get("/api/fichas", async (req, res) => {
 });
 
 // Resumo para dashboard: contagens por status operacional (fichas ativas).
-app.get("/api/fichas/resumo", async (_req, res) => {
+app.get("/api/fichas/resumo", ler, async (_req, res) => {
   const ativas = await prisma.fichas.findMany({ where: { status: "ativa" } });
   const hoje = HOJE();
   const cont: Record<string, number> = {};
@@ -173,7 +181,7 @@ app.get("/api/fichas/resumo", async (_req, res) => {
 });
 
 // Detalhe de uma ficha + timeline (entregas da cadeia de troca + inspeções).
-app.get("/api/fichas/:id", async (req, res) => {
+app.get("/api/fichas/:id", ler, async (req, res) => {
   const ficha = await prisma.fichas.findUnique({ where: { id: Number(req.params.id) } });
   if (!ficha) return res.status(404).json({ error: "ficha não encontrada" });
   const inspecoes = await prisma.inspecoes.findMany({ where: { ficha_id: ficha.id }, orderBy: { data: "asc" } });
@@ -184,7 +192,7 @@ app.get("/api/fichas/:id", async (req, res) => {
 });
 
 // Histórico do EPI: cadeia de fichas (inicial → trocas → baixa) de um colaborador+EPI.
-app.get("/api/fichas/:id/historico", async (req, res) => {
+app.get("/api/fichas/:id/historico", ler, async (req, res) => {
   const base = await prisma.fichas.findUnique({ where: { id: Number(req.params.id) } });
   if (!base) return res.status(404).json({ error: "ficha não encontrada" });
   const cadeia = await prisma.fichas.findMany({
@@ -195,7 +203,7 @@ app.get("/api/fichas/:id/historico", async (req, res) => {
 });
 
 // Registrar inspeção (com digital do inspetor — verificada 1:1 se cadastrado).
-app.post("/api/fichas/:id/inspecoes", async (req, res) => {
+app.post("/api/fichas/:id/inspecoes", escrever, async (req, res) => {
   const b = req.body ?? {};
   if (b.inspetor_id && b.assinatura_img) {
     try {
@@ -213,7 +221,7 @@ app.post("/api/fichas/:id/inspecoes", async (req, res) => {
 });
 
 // Baixa manual da ficha (sem assinatura por digital).
-app.post("/api/fichas/:id/baixa", async (req, res) => {
+app.post("/api/fichas/:id/baixa", escrever, async (req, res) => {
   const r = await baixarFicha(Number(req.params.id), req.body ?? {});
   if (!r.ok) return res.status(400).json({ error: r.erro });
   res.json(await prisma.fichas.findUnique({ where: { id: Number(req.params.id) } }));
@@ -225,7 +233,7 @@ app.get("/api/biometria/health", async (_req, res) => {
 });
 
 // Verifica uma digital contra o cadastro do colaborador (feedback no front).
-app.post("/api/biometria/verify", async (req, res) => {
+app.post("/api/biometria/verify", escrever, async (req, res) => {
   const b = req.body ?? {};
   if (!b.colaborador_id || !b.image) {
     return res.status(400).json({ error: "colaborador_id e image são obrigatórios" });
