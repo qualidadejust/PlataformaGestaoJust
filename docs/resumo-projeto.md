@@ -140,13 +140,15 @@ Biometria .NET (4002) ◄── Core e Security mandam probe+candidates; devolve
 
 ## 6. JustSecurity — segurança do trabalho
 
-- `server/db.ts` — SQLite (`data/justsecurity.db`) **direto com better-sqlite3** (não
-  usa Prisma). Schema + seed locais. Guarda só **entregas** e **fichas**; colaboradores e
-  EPIs vêm do Core.
-- `server/index.ts` (Express:4001). Rotas: `/api/entregas` (+ `/verificacao`),
-  `/api/fichas` (+ `/resumo`, `/:id`, `/:id/historico`, `/:id/inspecoes`, `/:id/baixa`),
-  `/api/biometria/health|verify`. Colaboradores/EPIs **não** têm rota aqui — a UI consome
-  `/core/api/...` via **proxy do Vite** (`vite.config.ts`: `/core` → `http://localhost:4100`).
+- `server/lib/prisma.ts` — **Prisma 7 + PostgreSQL** (Neon), mesmo padrão dos demais apps.
+  Schema legado (`id` Int/datas String, válidos no Postgres). Guarda só **entregas** e
+  **fichas**; colaboradores e EPIs vêm do Core.
+- `server/index.ts` (Express:4001). **Auth**: `requireAuth` global + `requirePerm` por rota
+  (`security.read` / `security.write`); no-op em dev (sem `AUTH_ENFORCE`). Rotas:
+  `/api/entregas` (+ `/verificacao`), `/api/fichas` (+ `/resumo`, `/:id`, `/:id/historico`,
+  `/:id/inspecoes`, `/:id/baixa`), `/api/biometria/health|verify`. Colaboradores/EPIs **não**
+  têm rota aqui — a UI consome `/core/api/...` via **proxy do Vite** (`vite.config.ts`:
+  `/core` → `http://localhost:4100`).
 - `server/biometria.ts` — match **1:N**: busca templates do colaborador no Core
   (`CORE_URL`, default `127.0.0.1:4100`) e chama o serviço .NET (`BIOMETRIA_URL`, default
   `127.0.0.1:4002`) `/match`. `MATCH_THRESHOLD` default **40** (~FMR 0,01%), via env.
