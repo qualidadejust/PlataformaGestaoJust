@@ -65,6 +65,7 @@ Biometria .NET (4002) ◄── Core e Security mandam probe+candidates; devolve
 - `prisma/schema.prisma` — provider `postgresql`. **Modelos**: `Empresa`, `Cargo`, `Obra`,
   `Colaborador`, `BiometriaDigital`, `Alocacao`, `Fornecedor`, `Setor`, `Indicador`, `Insumo`,
   `TipoDocumento`, `Documento`, `Veiculo`, `CustoCargo`, `Cliente`, `Unidade`,
+  `Local`, `Servico`, `Tarefa` (backbone ACL Prevision — ver seção 15),
   `FormularioTipo`, `FormularioGrupo`, `FormularioModelo`, `FormularioInstancia` (motor de
   formulários — ver seção 14), + controle de acesso (`Usuario`/`Perfil`/`Permissao`/`LogAcesso`).
   - `Cliente` = comprador do imóvel. `Unidade` = unidade física entregável (apartamento |
@@ -96,7 +97,9 @@ Biometria .NET (4002) ◄── Core e Security mandam probe+candidates; devolve
     retenção, obrigatório) por `entidade_tipo`. Seed (51 tipos derivados da PGQ-Lista Mestra e
     do Mapa de Controle de Registros) em `prisma/import-tipos-documento.ts`. Vocabulário
     controlado (setores/processos/classificações) em `server/lib/ged-taxonomia.ts`.
-  - `Obra` tem `cost_center` (centro de custo), empresa, status.
+  - `Obra` tem `cost_center` (centro de custo), empresa, status, `sienge_id` (ID do Sienge para
+    reconciliação financeira — ACL) e `tipo_fiscal` (`MESMO_CNPJ` | `INTER_SPE`, define modo de
+    transferência no JustEstoque).
   - `Insumo` = catálogo de EPIs (com C.A.), materiais, ferramentas, equipamentos.
   - `Alocacao` = colaborador × obra × período (papel, principal, responsável).
   - `BiometriaDigital` = templates de digital do colaborador (cadastro é no Core).
@@ -495,3 +498,59 @@ TODOS os apps (vistoria, FVS, EPI, clima, triagem, assistência). Mora no **Core
   Core em vez do modelo local) → FVS/qualidade → EPI → surveys. O `<FormRenderer schema>` (front
   compartilhado) lê o JSON e monta a tela. Migration aditiva `20260625140000_motor_formularios`
   no Neon `justcore` (4 tabelas novas).
+
+## 15. Backbone ACL — Local, Serviço, Tarefa (Prevision/Sienge)
+
+**Célula atômica** da plataforma: `Obra × Serviço × Local`. Todo módulo (JustDocs, FVS, NC,
+Estoque, AT) é uma "lente" sobre essa célula. Regra de ouro: **cada campo tem um único dono** —
+nunca two-way sync. Prevision é fonte da LBS/cronograma; Sienge é fonte do fiscal/orçamento.
+
+### Models (Core `prisma/schema.prisma`)
+
+- **`Local`** — nó da LBS (`zona` = `replication_group` do Prevision, `pavimento` = `floor`).
+  Chave natural: `@@unique([obra_id, zona, pavimento])`. `external_id` = referência Prevision.
+  `origem` = `PREVISION | MANUAL`. Relação: `Obra → Local[] → Tarefa[]`.
+
+- **`Servico`** — catálogo canônico de etapas construtivas. `sigla_prancha` (`@@unique`) =
+  prefixo do `service` no CSV (`ALV`, `PIL`, `HID`, `VIG/LAJ/ESC`, `GES`…). Guarda também
+  `codigo_prevision` e `codigo_sienge` para reconciliação futura.
+
+- **`Tarefa`** — espelho de uma linha do cronograma Prevision. `external_id` (`@@unique`) =
+  id Prevision (+ `_` + `part_counter` quando ≥ 2). Campos: `baseline_inicio/fim`,
+  `real_inicio/fim`, `duracao`, `critico`, `avanco_pct`, `predecessores`, `successores`.
+  Upsert idempotente por `external_id` (RI-01 — pode rodar N vezes com o mesmo CSV).
+
+- **`Obra`** ganhou `sienge_id` (`@@unique`) e `tipo_fiscal` (`MESMO_CNPJ | INTER_SPE`) para
+  integração Sienge (JustEstoque Fase E).
+
+### ACL Integration Module (`server/integrations/`)
+
+```
+previsionClient.ts           — parser de CSV exportado do Prevision
+mappers/prevision.ts         — PrevisionRow → {locais, servicos, tarefas} com extractSigla()
+sync/syncPrevision.ts        — upsert idempotente (RI-01): Local → Servico → Tarefa em seq.
+routes.ts                    — rotas Express registradas em registerIntegrations()
+```
+
+**Rotas ACL (Core 4100)**:
+- `POST /api/integrations/prevision/sync` — recebe CSV (multipart `csv` + `obra_id`, ou JSON
+  `{ obra_id, csv_content }`). Retorna `{ linhas_lidas, resultado: { locais, servicos, tarefas, errors } }`.
+  Perm `core.integracao.write`.
+- `GET /api/integrations/prevision/status/:obra_id` — contagem de locais/tarefas por obra.
+  Perm `core.integracao.read`.
+- `GET /api/integrations/status` — stub REST para o Sienge (RI-04).
+
+**Rotas CRUD backbone (Core 4100)**:
+- `GET|POST|PUT|DELETE /api/locais` (include: obra; perm `core.cadastro`)
+- `GET|POST|PUT|DELETE /api/servicos` (perm `core.cadastro`)
+- `GET|POST|PUT|DELETE /api/tarefas` (include: local, servico; perm `core.cadastro`)
+
+**Migration**: `20260630120000_backbone_local_servico_tarefa` — aplicada ao Neon `justcore`.
+
+**Regras de integração (RI-01 a RI-04)**:
+- RI-01 — upsert idempotente por `external_id` (N rodadas = mesmo resultado).
+- RI-02 — pull agendado (cron noturno) + botão manual; webhook só Fase 2.
+- RI-03 — compra/custo sempre ancorado no Sienge (Just nunca cria entrada de compra).
+- RI-04 — Just expõe REST para o Sienge consumir status de documentos/FVS/NC (stub pronto).
+
+**Próximo passo** (Fase A): JustDocs + JustFVS usando `tarefa_id` como âncora da célula.

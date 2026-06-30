@@ -9,6 +9,7 @@ import { registerGate } from "./gate.ts";
 import { registerFormularios } from "./formularios.ts";
 import { registerAuth } from "./auth.ts";
 import { registerAcessos } from "./acessos.ts";
+import { registerIntegrations } from "./integrations/routes.ts";
 import { requireAuth, requirePerm } from "./lib/auth.ts";
 
 // Refino de permissão por rota. Só vale em produção (AUTH_ENFORCE), onde a global `requireAuth`
@@ -224,6 +225,18 @@ registerGate(app, perm);
 
 // ---- Motor de formulários: templates versionados + instâncias (consumido por todos os apps) ----
 registerFormularios(app, perm);
+
+// ---- Backbone: locais, serviços, tarefas (dados-mestre do cronograma/LBS) ----
+registerCrud("locais", "local", { include: { obra: true }, orderBy: { zona: "asc" }, perm: "core.cadastro" });
+registerCrud("servicos", "servico", { orderBy: { sigla_prancha: "asc" }, perm: "core.cadastro" });
+registerCrud("tarefas", "tarefa", {
+  include: { local: true, servico: true },
+  orderBy: { created_at: "asc" },
+  perm: "core.cadastro",
+});
+
+// ---- ACL Prevision/Sienge: sync + status endpoints ----
+registerIntegrations(app, perm);
 
 const PORT = 4100;
 app.listen(PORT, () => console.log(`JustCore (dados-mestre) rodando em http://localhost:${PORT}`));

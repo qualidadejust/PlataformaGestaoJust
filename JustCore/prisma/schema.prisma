@@ -52,6 +52,8 @@ model Obra {
   id          String   @id @default(uuid())
   nome        String
   cost_center String?  @unique // centro de custo / chave de ligação com a folha
+  sienge_id   String?  @unique // ID da obra no Sienge (reconciliação financeira — ACL)
+  tipo_fiscal String   @default("MESMO_CNPJ") // MESMO_CNPJ | INTER_SPE (transferências JustEstoque)
   tipo        String   @default("obra") // obra | sede
   status      String   @default("ativa") // ativa | encerrada
   empresa_id  String?
@@ -66,6 +68,8 @@ model Obra {
   empresa   Empresa?   @relation(fields: [empresa_id], references: [id], onDelete: SetNull)
   alocacoes Alocacao[]
   unidades  Unidade[]
+  locais    Local[]
+  tarefas   Tarefa[]
 
   @@map("obras")
 }
@@ -587,6 +591,89 @@ model FormularioModelo {
   @@index([escopo])
   @@index([tipo_id])
   @@map("formulario_modelos")
+}
+
+/// ----------------------------------------------------------------------------
+/// BACKBONE — Obra × Serviço × Local (ACL Prevision/Sienge).
+/// Local = nó do LBS (zona→pavimento); Servico = catálogo canônico de etapas;
+/// Tarefa = célula atômica de cronograma, espelho do Prevision. Upsert por external_id (RI-01).
+/// Ver `server/integrations/` e skill `banco-dados`.
+/// ----------------------------------------------------------------------------
+
+/// Nó do breakdown de local (LBS) — espelha replication_group × floor do Prevision.
+/// Chave natural: obra_id + zona + pavimento (@@unique).
+model Local {
+  id          String   @id @default(uuid())
+  obra_id     String
+  zona        String   // replication_group: TIPOS | SUBSOLOS | FACHADAS | LAZER | PERSONALIZAÇÕES | ...
+  pavimento   String   // floor: 2º ANDAR | SUBSOLO | LAZER | COBERTURA/BARRILETE | ...
+  parte       String?  // sub-divisão opcional (uso futuro)
+  nome        String?  // rótulo de exibição ex.: "Tipos — 5º Andar"
+  external_id String?  // chave no Prevision (referência; a chave Just é obra+zona+pavimento)
+  origem      String   @default("PREVISION") // PREVISION | MANUAL
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  obra    Obra     @relation(fields: [obra_id], references: [id], onDelete: Cascade)
+  tarefas Tarefa[]
+
+  @@unique([obra_id, zona, pavimento])
+  @@index([obra_id])
+  @@map("locais")
+}
+
+/// Catálogo canônico de serviços/etapas construtivas. `sigla_prancha` = prefixo do service
+/// no Prevision (ALV, PIL, HID, VIG/LAJ/ESC…) e identificador nas pranchas do projeto.
+model Servico {
+  id               String   @id @default(uuid())
+  nome             String   // nome completo normalizado ex.: "ALVENARIA DE BLOCOS CERÂMICOS"
+  sigla_prancha    String   @unique // prefixo Prevision e prancha (ALV, PIL, HID, GES…)
+  codigo_prevision String?  // id no Prevision quando diferente da sigla
+  codigo_sienge    String?  // código de EAP no Sienge (reconciliação futura)
+  ativo            Boolean  @default(true)
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+
+  tarefas Tarefa[]
+
+  @@map("servicos")
+}
+
+/// Célula atômica Obra × Local × Serviço + cronograma + avanço. Espelha uma linha do
+/// CSV/API Prevision. `external_id` = id Prevision (+ "_" + part_counter quando ≥ 2).
+/// Upsert idempotente por `external_id` (RI-01). Avanço vem do pull noturno (RI-02).
+model Tarefa {
+  id               String    @id @default(uuid())
+  obra_id          String
+  local_id         String
+  servico_id       String
+  external_id      String    @unique // id Prevision [+ "_" + part_counter quando ≥ 2]
+  origem           String    @default("PREVISION") // PREVISION | MANUAL
+  job              String?   // sub-etapa: "Primeira fiada", "Execução da alvenaria", ...
+  // cronograma
+  baseline_inicio  DateTime?
+  baseline_fim     DateTime?
+  real_inicio      DateTime?
+  real_fim         DateTime?
+  duracao          Float?    // dias úteis
+  critico          Boolean   @default(false)
+  // avanço físico (atualizado pelo syncJob)
+  avanco_pct       Float     @default(0)
+  // rastreabilidade do Prevision
+  predecessores    String?   // ids predecessores (vírgula-separados)
+  successores      String?   // ids sucessores (vírgula-separados)
+  material_resources String?
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
+
+  obra    Obra    @relation(fields: [obra_id], references: [id], onDelete: Cascade)
+  local   Local   @relation(fields: [local_id], references: [id])
+  servico Servico @relation(fields: [servico_id], references: [id])
+
+  @@index([obra_id])
+  @@index([local_id])
+  @@index([servico_id])
+  @@map("tarefas")
 }
 
 /// Preenchimento de um formulário (congela a versão do modelo). Polimórfico
