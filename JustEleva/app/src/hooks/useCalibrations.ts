@@ -4,9 +4,9 @@ export type CalibrationEntry = {
   id: string;
   employee_id: string;
   cycle_id: string;
-  score: number | null;
   potential: string | null;
   justification: string | null;
+  consensus_date: string | null;
   status: string;
 };
 
@@ -37,7 +37,12 @@ export function useSaveCalibrations() {
       status,
     }: {
       cycleId: string;
-      entries: Array<{ employee_id: string; score?: number | null; potential?: string | null; justification?: string | null }>;
+      entries: Array<{
+        employee_id: string;
+        potential?: string | null;
+        justification?: string | null;
+        consensus_date?: string | null;
+      }>;
       status?: 'draft' | 'finalized';
     }) =>
       fetchJSON<{ ok: boolean }>(`${BASE}/${cycleId}`, {
