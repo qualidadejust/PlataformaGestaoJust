@@ -580,6 +580,7 @@ model FormularioModelo {
   dias_validade Int?
   config        String? // JSON: { avaliados:{local:{informar,obrigar},...}, comportamento:{assina_responsavel,assina_avaliado,exibe_nota,calculo_nota} }
   estrutura     String   @default("[]") // JSON: [{ secao, ordem, itens:[{ ordem, descricao, instrucoes, peso, resposta:{tipo,rotulo,opcoes,permite_na,exige_justificativa_na}, gera_nc:{...} }] }]
+  servico_sigla String? // vincula ao Servico.sigla_prancha (ex.: "FOR", "ALV", "REV"); nulo = modelo genérico
   created_at    DateTime @default(now())
   updated_at    DateTime @updatedAt
 
@@ -590,6 +591,7 @@ model FormularioModelo {
   @@index([codigo])
   @@index([escopo])
   @@index([tipo_id])
+  @@index([servico_sigla])
   @@map("formulario_modelos")
 }
 
@@ -704,4 +706,48 @@ model FormularioInstancia {
   @@index([escopo])
   @@index([entidade_tipo, entidade_id])
   @@map("formulario_instancias")
+}
+
+/// Override da sequência de qualidade por serviço/obra. Quando o cronograma Prevision
+/// não reflete a ordem de qualidade, o engenheiro cadastra aqui a dependência explícita.
+/// obra_id nulo = regra global (vale para todas as obras).
+model SequenciaQualidade {
+  id               String   @id @default(uuid())
+  obra_id          String?  // null = global; ID da Obra no Core quando específico
+  servico_sigla    String   // Servico.sigla_prancha que deve ser verificado (ex.: "REV")
+  depende_de_sigla String   // Servico.sigla_prancha que precisa estar aprovado antes (ex.: "CHA")
+  ordem            Int      @default(0)
+  ativo            Boolean  @default(true)
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+
+  @@unique([obra_id, servico_sigla, depende_de_sigla])
+  @@index([servico_sigla])
+  @@index([obra_id])
+  @@map("sequencia_qualidade")
+}
+
+/// NC gerada pelo motor de formulários (transversal: FVS, Vistoria, EPI...).
+/// Cada item "não conforme" com gera_nc.ativo = true abre uma NC ao concluir a instância.
+model NaoConformidade {
+  id                         String    @id @default(uuid())
+  instancia_id               String    // FormularioInstancia que originou a NC
+  item_ref                   String    // "secao_ordem:item_ordem" — referência à resposta
+  descricao                  String    // cópia da observação do item (o que está errado)
+  causa                      String?   // causa raiz
+  acao_corretiva             String?   // o que vai ser feito
+  responsavel_id             String?   // ID do Colaborador no Core
+  responsavel_nome           String?   // snapshot
+  prazo                      DateTime?
+  severidade                 String    @default("media") // baixa | media | alta | critica
+  status                     String    @default("aberta") // aberta | em_acao | reverificacao | fechada
+  instancia_reverificacao_id String?   // FormularioInstancia criada na reverificação
+  aberta_em                  DateTime  @default(now())
+  fechada_em                 DateTime?
+  created_at                 DateTime  @default(now())
+  updated_at                 DateTime  @updatedAt
+
+  @@index([instancia_id])
+  @@index([status])
+  @@map("nao_conformidades")
 }

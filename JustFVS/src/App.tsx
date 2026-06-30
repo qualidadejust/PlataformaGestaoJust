@@ -1,12 +1,14 @@
 import { useState } from "react";
-import { ClipboardCheck, CalendarDays, ListChecks, LogOut } from "lucide-react";
+import { ClipboardCheck, CalendarDays, ListChecks, LogOut, LayoutDashboard, AlertTriangle } from "lucide-react";
 import { cn } from "./lib/cn.ts";
 import { useAuth } from "./auth.tsx";
 import CronogramaView from "./views/CronogramaView.tsx";
 import FvsListaView from "./views/FvsListaView.tsx";
 import NovoFvsView from "./views/NovoFvsView.tsx";
+import GestaoView from "./views/GestaoView.tsx";
+import PendenciasView from "./views/PendenciasView.tsx";
 
-export type Tab = "cronograma" | "lista";
+export type Tab = "gestao" | "cronograma" | "lista" | "pendencias";
 
 export interface NavState {
   tab: Tab;
@@ -16,11 +18,13 @@ export interface NavState {
 
 export default function App() {
   const { user, logout } = useAuth();
-  const [nav, setNav] = useState<NavState>({ tab: "cronograma" });
+  const [nav, setNav] = useState<NavState>({ tab: "gestao" });
 
   const tabs = [
-    { id: "cronograma" as Tab, label: "Cronograma", icon: CalendarDays },
-    { id: "lista" as Tab, label: "Fichas FVS", icon: ListChecks },
+    { id: "gestao" as Tab,     label: "Gestão",     icon: LayoutDashboard },
+    { id: "cronograma" as Tab, label: "Cronograma", icon: CalendarDays    },
+    { id: "lista" as Tab,      label: "Fichas FVS", icon: ListChecks      },
+    { id: "pendencias" as Tab, label: "Pendências", icon: AlertTriangle   },
   ];
 
   const irParaNovaFvs = (tarefaId: string, tarefaLabel: string) =>
@@ -75,8 +79,12 @@ export default function App() {
             onConcluir={voltarParaCronograma}
             onCancelar={voltarParaCronograma}
           />
+        ) : nav.tab === "gestao" ? (
+          <GestaoView onAbrirFvs={irParaNovaFvs} />
         ) : nav.tab === "cronograma" ? (
           <CronogramaView onNovaFvs={irParaNovaFvs} />
+        ) : nav.tab === "pendencias" ? (
+          <PendenciasView />
         ) : (
           <FvsListaView />
         )}

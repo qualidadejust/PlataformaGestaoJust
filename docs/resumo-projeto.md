@@ -25,6 +25,7 @@ transações** e referencia os IDs do Core (com snapshot dos dados na hora da tr
 | **JustFrota** | `JustFrota/` | 4301 | 4300 | **Gestão de frota**: diário de bordo (viagens) + custos (abastecimento/manutenção/fixos) + **rateio por km** entre as obras. Guarda só transações; veículo/motorista/obra vêm do Core. |
 | **JustAtestados** | `JustAtestados/` | 4701 | 4700 | **Atestados/declarações de comparecimento**: lançamento (apontador) → fila de análise (RH aprova/recusa) → KPIs de absenteísmo. Guarda só a transação + snapshot; colaborador/obra/cargo vêm do Core; **anexo (CID/saúde) vai pro GED do Core como sensível** (guarda só o `ged_documento_id`). Permissões `atestados.read/write/aprovar`; perfil novo `apontador`. Front adaptado do repo externo (`pridema1/atestadosJUST`): telas mantidas, camada de dados trocada por `apiDataService` (back + Core), auth/role derivado dos perfis; CID-10 como asset estático; cadastro é só-leitura do Core (criar/editar no JustCore). |
 | **JustVistoria** | `JustVistoria/` | 4801 | 4800 | **Vistoria & Entrega de obra**: pipeline por unidade (Construção→Inspeção Final→Vistoria do Cliente→Entrega das Chaves), checklist (motor de formulários), não-conformidades com bloqueio, **termos assinados em tela**→GED, relatório PDF. Cliente/Unidade vêm do Core; integra o **cronograma Prevision** (locais/pacotes/prazos). Guarda só transações. Ver skill `vistoria-entrega`. |
+| **JustFVS** | `JustFVS/` | 4900 | — | **Fichas de Verificação de Serviço (FVS/FIS)**: gestão de qualidade de obra inteira — árvore de serviços (Obra→Zona→Pavimento→Tarefa), abertura de FVS por local, gate sequencial (não abre FVS se anterior não aprovada), fluxo completo de NC, projetos/especificações por tarefa via GED. **Front-only** (sem back próprio) — consome o **motor de formulários do Core** (`/api/formularios`), backbone (`/api/tarefas`) e GED (`/api/documentos`). Ver seção 16. |
 | **JustDocs** | `JustDocs/` | 4400 | — | **GED** (gestão eletrônica de documentos): UI com 4 abas — **Pastas** (navegação tipo SharePoint: SGQ/Obras/Pessoas/Empresa), **Documentos** (enviar/consultar/versionar), **Triagem IA** (sobe até 2 arquivos, a IA propõe tipo/colaborador/sensível/validade, confere e envia ao GED) e **Vencimentos**. **Sem back/DB próprio** — consome a API do Core (proxy `/api`→4100); arquivos no SharePoint. |
 | **Biometria (.NET)** | `JustSecurity/biometria/` | — | 4002 | Serviço **SourceAFIS** (.NET) que faz o **match 1:N** das digitais. Consumido por Core e Security via HTTP. |
 
@@ -39,6 +40,7 @@ JustCore (4100)  ──►  dados-mestre (SQLite + Prisma)  ◄── BiometriaD
    ├────────────── JustGate (4200)     — WhatsApp: identifica remetente e roteia
    ├────────────── JustFrota (4300)    — frota: viagens + rateio por km entre obras
    ├────────────── JustAtestados (4700)— atestados/declarações; anexo→GED sensível do Core
+   ├────────────── JustFVS (4900)     — FVS/qualidade: front-only, consome motor+backbone+GED do Core
    └────────────── JustDocs (4400)     — GED: UI de documentos (consome a API do Core)
 JustHub (4500) — portal: cards de todos os módulos (entrada única, sem DB)
 JustTrain → gera o PDF do certificado (jsPDF, no front) e o arquiva no GED do Core (POST /api/documentos, tipo certificado_treinamento)
@@ -554,3 +556,46 @@ routes.ts                    — rotas Express registradas em registerIntegratio
 - RI-04 — Just expõe REST para o Sienge consumir status de documentos/FVS/NC (stub pronto).
 
 **Próximo passo** (Fase A): JustDocs + JustFVS usando `tarefa_id` como âncora da célula.
+
+## 16. JustFVS — Fichas de Verificação de Serviço (porta 4900)
+
+App de **gestão de qualidade de obra** (PBQP-H). **Front-only** — sem back/DB próprio; consome
+o **Core (4100)**: motor de formulários, backbone Local/Serviço/Tarefa, GED e auth.
+
+**Tela Cronograma** (`CronogramaView`): árvore Obra→Zona→Pavimento→Tarefa (dados do backbone),
+com botão "FVS" por tarefa. Avanço físico do Prevision visível (barra + %). Tarefas bloqueadas
+pelo gate sequencial exibem cadeado e motivo.
+
+**Tela Fichas FVS** (`FvsListaView`): listagem de todas as `FormularioInstancia` com
+`escopo=fvs` por obra — status (rascunho / conforme / com NC), autor, data.
+
+**Tela Gestão** (`GestaoView`): painel por obra cruzando `Tarefa × FormularioInstancia`. Para
+cada tarefa que tem modelo FVS aplicável, deriva status de qualidade: **a abrir** (gap por
+local) / **rascunho** / **conforme** / **pendência NC** / **bloqueada**. Filtros obra/zona/
+pavimento/serviço + contadores no topo. Performance: sempre filtrar por `obra_id` no servidor;
+`staleTime` alto na árvore de tarefas.
+
+**Tela Pendências** (`PendenciasView`): lista NCs por obra/status (abertas/em ação/reverificação/
+fechadas). Tela de tratativa (causa, ação corretiva, responsável, prazo). Botão reverificar →
+nova FVS de reverificação. NC fechada desbloqueia o próximo serviço encadeado.
+
+**Preenchimento FVS** (`NovoFvsView`): carrega o `FormularioModelo` publicado cujo
+`servico_sigla` bate com a `Tarefa.servico.sigla_prancha`. Itens conforme/não-conforme/NA com
+observação e foto (→GED). Salvar rascunho ou concluir (exige todos respondidos). Ao concluir,
+cada item NC com `gera_nc.ativo` cria uma `NaoConformidade` no Core automaticamente.
+
+**Gate sequencial** (Core-side): ao criar `FormularioInstancia` com `escopo=fvs`, o Core valida
+se a tarefa predecessora (de `Tarefa.predecessores` ou de `SequenciaQualidade` de override) tem
+FVS aprovada (concluída, `total_nc=0`, sem NC aberta). Erro 409 pt-BR se bloqueada.
+
+**Projetos por tarefa** (GED): `Documento` com `entidade_tipo=tarefa`, `entidade_id=tarefa.id`,
+`categoria=especificacao`, `natureza=padrao`, `tipo_codigo=espec_servico` (versionável). Painel
+"Especificação desta tarefa" no `NovoFvsView` — mestre vê o pacote certo antes de preencher.
+Cadastro em massa por serviço/zona evita upload repetido (mesmo `grupo_id` compartilhado).
+
+**Modelos FVS** (motor do Core): `FormularioModelo` com `escopo=fvs`, `servico_sigla` vinculando
+ao `Servico`. Builder em `JustCore/src/views/FormulariosView.tsx`. Seed piloto Forro:
+`npm run db:seed-fvs-for`. Pretendido: 100+ modelos — um por tipo de serviço/etapa construtiva.
+
+**Proxy Vite**: porta 4900; `/api` → Core 4100 (motor, backbone, GED, NC, auth).
+`JustFVS/src/lib/api.ts` — helper `api(path, opts)` que lança em erro com mensagem pt-BR.

@@ -45,6 +45,34 @@ export interface FormularioModelo {
   publicado: boolean;
   estrutura: string; // JSON
   config: string | null; // JSON
+  servico_sigla: string | null;
+}
+
+export interface NaoConformidade {
+  id: string;
+  instancia_id: string;
+  item_ref: string;
+  descricao: string;
+  causa: string | null;
+  acao_corretiva: string | null;
+  responsavel_id: string | null;
+  responsavel_nome: string | null;
+  prazo: string | null;
+  severidade: string;
+  status: string; // aberta | em_acao | reverificacao | fechada
+  instancia_reverificacao_id: string | null;
+  aberta_em: string;
+  fechada_em: string | null;
+  created_at: string;
+}
+
+export interface SequenciaQualidade {
+  id: string;
+  obra_id: string | null;
+  servico_sigla: string;
+  depende_de_sigla: string;
+  ordem: number;
+  ativo: boolean;
 }
 
 export interface ItemResposta {

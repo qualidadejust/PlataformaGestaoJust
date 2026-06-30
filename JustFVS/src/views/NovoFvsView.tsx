@@ -116,18 +116,21 @@ export default function NovoFvsView({ tarefaId, tarefaLabel, onConcluir, onCance
   const { user } = useAuth();
   const qc = useQueryClient();
 
-  // Carrega o modelo FVS publicado mais recente
-  const { data: modelos, isLoading: loadingModelo } = useQuery<FormularioModelo[]>({
-    queryKey: ["formularios-fvs"],
-    queryFn: () => api("/formularios?escopo=fvs&publicado=true"),
-  });
-
-  // Carrega dados da tarefa para exibir contexto
+  // Carrega dados da tarefa (necessário para saber o servico_sigla)
   const { data: tarefa } = useQuery<Tarefa>({
     queryKey: ["tarefa", tarefaId],
     queryFn: () => api(`/tarefas/${tarefaId}`),
   });
 
+  // Carrega o modelo FVS publicado vinculado ao serviço desta tarefa
+  const sigla = tarefa?.servico?.sigla_prancha;
+  const { data: modelos, isLoading: loadingModelo } = useQuery<FormularioModelo[]>({
+    queryKey: ["formularios-fvs", sigla],
+    queryFn: () => api(`/formularios?escopo=fvs&publicado=true${sigla ? `&servico_sigla=${encodeURIComponent(sigla)}` : ""}`),
+    enabled: !!tarefa, // aguarda a tarefa carregar para saber a sigla
+  });
+
+  // Modelo mais recente (maior versão) para o serviço — fallback sem sigla se não encontrar
   const modelo = modelos?.[0];
   const secoes: SecaoEstrutural[] = modelo ? JSON.parse(modelo.estrutura) : [];
 
@@ -213,9 +216,12 @@ export default function NovoFvsView({ tarefaId, tarefaLabel, onConcluir, onCance
     return (
       <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-center dark:border-amber-800 dark:bg-amber-950">
         <AlertTriangle className="mx-auto mb-2 size-6 text-amber-500" />
-        <p className="text-sm font-medium text-amber-800 dark:text-amber-200">Nenhum modelo FVS publicado encontrado.</p>
+        <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+          Nenhum modelo FVS publicado encontrado{sigla ? ` para o serviço "${sigla}"` : ""}.
+        </p>
         <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
-          Execute <code>npm run db:seed-fvs-for</code> no JustCore para criar o modelo piloto Forro.
+          Cadastre e publique um modelo com escopo <strong>fvs</strong> e serviço{" "}
+          <strong>{sigla ?? "correspondente"}</strong> no JustCore → Formulários.
         </p>
         <button onClick={onCancelar} className="mt-4 rounded-lg bg-amber-600 px-4 py-2 text-sm text-white hover:bg-amber-700">
           Voltar

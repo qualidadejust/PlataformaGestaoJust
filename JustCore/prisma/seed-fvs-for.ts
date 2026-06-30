@@ -95,6 +95,13 @@ async function main() {
   const tipoFvs = await db.formularioTipo.findUnique({ where: { codigo: "fvs" } });
   const grupo = await db.formularioGrupo.findUnique({ where: { codigo: "06" } });
 
+  // Garante que o Servico FOR existe (se não existir, cria como manual)
+  await db.servico.upsert({
+    where: { sigla_prancha: "FOR" },
+    update: {},
+    create: { sigla_prancha: "FOR", nome: "FORRO (DRYWALL/GESSO/PVC)", ativo: true },
+  });
+
   const dados = {
     codigo: "FVS-FOR",
     nome: "FVS — Verificação de Serviço: Forro (Drywall/Gesso)",
@@ -104,6 +111,7 @@ async function main() {
     grupo_id: grupo?.id ?? null,
     escopo: "fvs",
     entidade_alvo: "tarefa",
+    servico_sigla: "FOR",
     versao: 1,
     ativo: true,
     publicado: true,

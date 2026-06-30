@@ -6,7 +6,7 @@ import { extractTemplate, biometriaOnline } from "./lib/biometria.ts";
 import { registerDocumentos } from "./documentos.ts";
 import { registerTriagem } from "./triagem.ts";
 import { registerGate } from "./gate.ts";
-import { registerFormularios } from "./formularios.ts";
+import { registerFormularios, registerQualidade } from "./formularios.ts";
 import { registerAuth } from "./auth.ts";
 import { registerAcessos } from "./acessos.ts";
 import { registerIntegrations } from "./integrations/routes.ts";
@@ -232,6 +232,8 @@ registerGate(app, perm);
 
 // ---- Motor de formulários: templates versionados + instâncias (consumido por todos os apps) ----
 registerFormularios(app, perm);
+// ---- Qualidade: NCs + Sequência de gate FVS ----
+registerQualidade(app, perm);
 
 // ---- Backbone: locais, serviços, tarefas (dados-mestre do cronograma/LBS) ----
 registerCrud("locais", "local", {
