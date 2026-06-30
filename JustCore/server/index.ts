@@ -45,24 +45,31 @@ interface CrudOpts {
   orderBy?: Record<string, "asc" | "desc">;
   /** base de permissão (ex.: "core.cadastro"): GET exige `.read`, mutações exigem `.write`. */
   perm?: string;
+  /** Campos que podem ser filtrados via query params (ex.: ["obra_id", "escopo"]). Igualdade de string. */
+  filterKeys?: string[];
 }
 
 /**
  * Registra os 5 endpoints REST padrão de uma entidade-mestre.
- *   GET    /api/<path>        lista
+ *   GET    /api/<path>        lista (aceita ?filterKey=val para campos em filterKeys)
  *   GET    /api/<path>/:id    detalha
  *   POST   /api/<path>        cria
  *   PUT    /api/<path>/:id    edita
  *   DELETE /api/<path>/:id    remove
  */
 function registerCrud(path: string, model: string, opts: CrudOpts = {}) {
-  const { include, orderBy = { created_at: "desc" }, perm: base } = opts;
+  const { include, orderBy = { created_at: "desc" }, perm: base, filterKeys = [] } = opts;
   const ler = base ? perm(`${base}.read`) : noop;
   const escrever = base ? perm(`${base}.write`) : noop;
 
-  app.get(`/api/${path}`, ler, async (_req, res) => {
+  app.get(`/api/${path}`, ler, async (req, res) => {
     try {
-      res.json(await db[model].findMany({ include, orderBy }));
+      const where: Record<string, any> = {};
+      for (const k of filterKeys) {
+        const v = req.query[k];
+        if (v !== undefined) where[k] = String(v);
+      }
+      res.json(await db[model].findMany({ include, orderBy, where: Object.keys(where).length ? where : undefined }));
     } catch (e) {
       res.status(500).json({ error: String((e as Error).message) });
     }
@@ -227,12 +234,18 @@ registerGate(app, perm);
 registerFormularios(app, perm);
 
 // ---- Backbone: locais, serviços, tarefas (dados-mestre do cronograma/LBS) ----
-registerCrud("locais", "local", { include: { obra: true }, orderBy: { zona: "asc" }, perm: "core.cadastro" });
+registerCrud("locais", "local", {
+  include: { obra: true },
+  orderBy: { zona: "asc" },
+  perm: "core.cadastro",
+  filterKeys: ["obra_id", "zona", "pavimento"],
+});
 registerCrud("servicos", "servico", { orderBy: { sigla_prancha: "asc" }, perm: "core.cadastro" });
 registerCrud("tarefas", "tarefa", {
   include: { local: true, servico: true },
-  orderBy: { created_at: "asc" },
+  orderBy: { baseline_inicio: "asc" },
   perm: "core.cadastro",
+  filterKeys: ["obra_id", "local_id", "servico_id", "critico"],
 });
 
 // ---- ACL Prevision/Sienge: sync + status endpoints ----
