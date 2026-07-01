@@ -79,7 +79,7 @@ evaluationsRouter.get('/:id', async (req, res) => {
       employee: { select: { name: true, role: true, is_manager: true, template_id: true } },
       evaluator: { select: { name: true } },
       cycle:     { select: { name: true } },
-      scores:          { select: { question_id: true, score: true } },
+      scores:          { select: { question_id: true, score: true, justification: true } },
       potential_scores: { select: { question_id: true, score: true } },
     },
   });
@@ -114,37 +114,49 @@ evaluationsRouter.post('/', async (req, res) => {
 });
 
 evaluationsRouter.put('/:id/scores', async (req, res) => {
-  const { scores, potential_scores, status, strengths, opportunities, feedback_date } = req.body;
+  const {
+    scores,
+    justifications,
+    status,
+    strengths,
+    opportunities,
+    feedback_date,
+    reflection_strengths,
+    reflection_difficulties,
+    reflection_competencies,
+  } = req.body;
 
   await prisma.$transaction(async (tx) => {
     if (scores) {
       for (const [question_id, score] of Object.entries(scores)) {
+        const justification = justifications?.[question_id] ?? null;
         await tx.evaluationScore.upsert({
           where:  { evaluation_id_question_id: { evaluation_id: req.params.id, question_id } },
-          update: { score: score as string },
-          create: { evaluation_id: req.params.id, question_id, score: score as string },
+          update: { score: score as string, justification },
+          create: { evaluation_id: req.params.id, question_id, score: score as string, justification },
         });
       }
     }
-    if (potential_scores) {
-      for (const [question_id, score] of Object.entries(potential_scores)) {
-        await tx.potentialScore.upsert({
-          where:  { evaluation_id_question_id: { evaluation_id: req.params.id, question_id } },
-          update: { score: score as number },
-          create: { evaluation_id: req.params.id, question_id, score: score as number },
-        });
-      }
-    }
-    const hasUpdate = status !== undefined || strengths !== undefined || opportunities !== undefined || feedback_date !== undefined;
+    const hasUpdate =
+      status !== undefined ||
+      strengths !== undefined ||
+      opportunities !== undefined ||
+      feedback_date !== undefined ||
+      reflection_strengths !== undefined ||
+      reflection_difficulties !== undefined ||
+      reflection_competencies !== undefined;
     if (hasUpdate) {
       await tx.evaluation.update({
         where: { id: req.params.id },
         data: {
-          ...(status        !== undefined && { status }),
-          ...(strengths     !== undefined && { strengths }),
-          ...(opportunities !== undefined && { opportunities }),
-          ...(feedback_date !== undefined && { feedback_date }),
-          ...(status === 'submitted'      && { submitted_at: new Date() }),
+          ...(status                  !== undefined && { status }),
+          ...(strengths               !== undefined && { strengths }),
+          ...(opportunities           !== undefined && { opportunities }),
+          ...(feedback_date           !== undefined && { feedback_date }),
+          ...(reflection_strengths    !== undefined && { reflection_strengths }),
+          ...(reflection_difficulties !== undefined && { reflection_difficulties }),
+          ...(reflection_competencies !== undefined && { reflection_competencies }),
+          ...(status === 'submitted'                && { submitted_at: new Date() }),
         },
       });
     }
