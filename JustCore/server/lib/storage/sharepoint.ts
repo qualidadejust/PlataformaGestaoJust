@@ -1,19 +1,15 @@
 import { Readable } from "node:stream";
 import { randomUUID } from "node:crypto";
 import type { StorageService, PutInput, StoredRef, StorageRef, FetchResult } from "./types.ts";
+import { getGraphToken, reqEnv } from "../graph/token.ts";
 
 // Driver SharePoint via Microsoft Graph (client-credentials, app-only).
 // Configurado por env (ver docs/integracao-sharepoint.md):
 //   SP_TENANT_ID, SP_CLIENT_ID, SP_CLIENT_SECRET, SP_SITE
 //   SP_ROOT (opcional) = pasta-base na biblioteca Documentos. Default "Plataforma JUST".
 // Pendência operacional: consentimento admin do Sites.Selected + liberar o app no site.
+// O token Graph é compartilhado (../graph/token.ts) — mesma credencial M365 do e-mail.
 const GRAPH = "https://graph.microsoft.com/v1.0";
-
-function reqEnv(name: string): string {
-  const v = process.env[name];
-  if (!v) throw new Error(`${name} não configurado (STORAGE_DRIVER=sharepoint exige ${name})`);
-  return v;
-}
 
 // Codifica o caminho preservando as barras entre segmentos.
 function encPath(p: string): string {
@@ -35,33 +31,11 @@ function entidadeSeg(id: string, label?: string): string {
 
 export class SharePointStorage implements StorageService {
   readonly driver = "sharepoint" as const;
-  private token: { value: string; exp: number } | null = null;
   private driveId: string | null = null;
-
-  private async getToken(): Promise<string> {
-    const now = Date.now() / 1000;
-    if (this.token && this.token.exp - 60 > now) return this.token.value;
-    const tenant = reqEnv("SP_TENANT_ID");
-    const body = new URLSearchParams({
-      client_id: reqEnv("SP_CLIENT_ID"),
-      client_secret: reqEnv("SP_CLIENT_SECRET"),
-      scope: "https://graph.microsoft.com/.default",
-      grant_type: "client_credentials",
-    });
-    const r = await fetch(`https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body,
-    });
-    if (!r.ok) throw new Error(`token Graph falhou (${r.status}): ${await r.text()}`);
-    const j = (await r.json()) as { access_token: string; expires_in?: number };
-    this.token = { value: j.access_token, exp: now + (j.expires_in ?? 3600) };
-    return this.token.value;
-  }
 
   private async graphJson(pathAndQuery: string): Promise<any> {
     const r = await fetch(GRAPH + pathAndQuery, {
-      headers: { Authorization: `Bearer ${await this.getToken()}` },
+      headers: { Authorization: `Bearer ${await getGraphToken()}` },
     });
     if (!r.ok) throw new Error(`Graph ${pathAndQuery} falhou (${r.status}): ${await r.text()}`);
     return r.json();
@@ -78,7 +52,7 @@ export class SharePointStorage implements StorageService {
   }
 
   async put(input: PutInput): Promise<StoredRef> {
-    const token = await this.getToken();
+    const token = await getGraphToken();
     const driveId = await this.getDriveId();
     const root = process.env.SP_ROOT ?? "Plataforma JUST";
     const folder = `${root}/${input.entidade_tipo}/${entidadeSeg(input.entidade_id, input.entidade_label)}/${input.categoria}`;
@@ -105,7 +79,7 @@ export class SharePointStorage implements StorageService {
   }
 
   async get(ref: StorageRef): Promise<FetchResult> {
-    const token = await this.getToken();
+    const token = await getGraphToken();
     const driveId = ref.drive_id ?? (await this.getDriveId());
     const r = await fetch(`${GRAPH}/drives/${driveId}/items/${ref.item_id}/content`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -118,7 +92,7 @@ export class SharePointStorage implements StorageService {
   }
 
   async remove(ref: StorageRef): Promise<void> {
-    const token = await this.getToken();
+    const token = await getGraphToken();
     const driveId = ref.drive_id ?? (await this.getDriveId());
     const r = await fetch(`${GRAPH}/drives/${driveId}/items/${ref.item_id}`, {
       method: "DELETE",

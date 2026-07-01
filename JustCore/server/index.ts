@@ -7,6 +7,7 @@ import { registerDocumentos } from "./documentos.ts";
 import { registerTriagem } from "./triagem.ts";
 import { registerGate } from "./gate.ts";
 import { registerFormularios, registerQualidade } from "./formularios.ts";
+import { registerEmails } from "./emails.ts";
 import { registerAuth } from "./auth.ts";
 import { registerAcessos } from "./acessos.ts";
 import { registerIntegrations } from "./integrations/routes.ts";
@@ -252,6 +253,9 @@ registerCrud("tarefas", "tarefa", {
 
 // ---- ACL Prevision/Sienge: sync + status endpoints ----
 registerIntegrations(app, perm);
+
+// ---- E-mail transversal (Microsoft 365 via Graph; console em dev). Consumido por todos os apps. ----
+registerEmails(app, perm);
 
 const PORT = 4100;
 app.listen(PORT, () => console.log(`JustCore (dados-mestre) rodando em http://localhost:${PORT}`));

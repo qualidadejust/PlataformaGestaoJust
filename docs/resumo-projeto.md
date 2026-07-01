@@ -588,6 +588,33 @@ cada item NC com `gera_nc.ativo` cria uma `NaoConformidade` no Core automaticame
 se a tarefa predecessora (de `Tarefa.predecessores` ou de `SequenciaQualidade` de override) tem
 FVS aprovada (concluída, `total_nc=0`, sem NC aberta). Erro 409 pt-BR se bloqueada.
 
+## 17. E-mail transversal — Microsoft 365 (Graph sendMail)
+
+**Integração transversal do Core** (como GED/motor/Gemini) para notificações, avisos, cobranças
+e relatórios. Mesma filosofia do storage: **uma interface, driver por env** — `console` (dev, só
+loga; default) × `graph` (prod). O driver Graph **reusa a mesma credencial app-only do SharePoint**
+(`SP_TENANT_ID`/`SP_CLIENT_ID`/`SP_CLIENT_SECRET`) — token compartilhado em
+`server/lib/graph/token.ts` (extraído do `storage/sharepoint.ts`). Escolha via Graph `sendMail`
+(não SMTP), à prova da desativação do Basic Auth pela Microsoft. Ver `docs/integracao-email.md`.
+
+- **Código:** `server/lib/email/` (`types`, `console`, `graph`, `index` com `enviarEmail()` +
+  `layoutPtBr()`); rotas em `server/emails.ts` (`registerEmails`).
+- **Rotas (Core 4100, perm `core.email.write`):** `POST /api/emails/enviar` (corpo `EmailInput`
+  `{ to, subject, html|texto, cc?, replyTo? }`) e `POST /api/emails/testar` (`{ para }`).
+  Consumível por telas (JWT) e por outros apps server-to-server (`x-internal-token`, como o GED).
+  Cada envio grava `logAcesso` (`email_enviado`/`email_teste`/`email_falha`) sem corpo/destinatário.
+- **Anti-abuso:** `server/lib/rate-limit.ts` (rate limit em memória por ator; `EMAIL_RATE_MAX`/
+  `EMAIL_RATE_WINDOW_MS`, default 60/min; chamadas internas isentas). **LGPD:** checklist
+  obrigatório para os gatilhos em `docs/integracao-email.md` (sem dado sensível no corpo; sensível
+  do GED só por CTA→download mediado, nunca anexo/link).
+- **Env:** `EMAIL_DRIVER` (console|graph), `EMAIL_FROM` (caixa **compartilhada** grátis, ex.
+  `naoresponda@construtorajust.com.br`), `EMAIL_REPLY_TO` (opcional). Setup M365 (caixa
+  compartilhada + `Mail.Send` + **Application Access Policy** restringindo à caixa) no doc.
+- **Permissão:** `core.email.write` (seed-acesso) — perfis `admin`/`rh`/`gestor_obra`.
+- **Ainda não feito (só a fundação):** gatilhos por evento (vencimentos GED, C.A. de EPI, NC,
+  atestados, avaliações) e relatórios agendados (cron externo grátis no Render → node-cron na
+  Hostinger, endpoint protegido por segredo).
+
 **Projetos por tarefa** (GED): `Documento` com `entidade_tipo=tarefa`, `entidade_id=tarefa.id`,
 `categoria=especificacao`, `natureza=padrao`, `tipo_codigo=espec_servico` (versionável). Painel
 "Especificação desta tarefa" no `NovoFvsView` — mestre vê o pacote certo antes de preencher.
