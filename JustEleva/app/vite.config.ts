@@ -19,6 +19,8 @@ export default defineConfig(() => {
           target: 'http://localhost:3001',
           changeOrigin: true,
         },
+        // cadastros-mestre e login centralizado vêm do Core
+        '/core': { target: 'http://localhost:4100', rewrite: (p) => p.replace(/^\/core/, '') },
       },
     },
   };

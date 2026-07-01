@@ -1,0 +1,183 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// ----------------------------------------------------------------------------
+/// JustVistoria — Vistoria & Entrega de Obra (Construtora JUST).
+/// Guarda só as TRANSAÇÕES; cadastro (Cliente/Unidade/Obra/Colaborador) vem do Core.
+/// Motor de formulários genérico (segue qualidade-fvs) — desenhado p/ reuso pelo
+/// futuro JustAssistencia (pós-entrega). IDs em UUID, snake_case (@@map). Ver skill
+/// `vistoria-entrega` e seção 0 do plano (integração Prevision).
+/// ----------------------------------------------------------------------------
+
+/// CRONOGRAMA Prevision (linha de base importada) — origem dos prazos e das pendências
+/// da Construção. Uma linha por tarefa do CSV/API do Prevision.
+model CronogramaTarefa {
+  id            String   @id @default(uuid())
+  prevision_id  String   @unique // id da tarefa na origem (Prevision)
+  obra_id       String?
+  servico       String // texto cheio: "ALV- ALVENARIA DE BLOCOS CERAMICOS (EQUIPE 1)"
+  pacote        String // prefixo normalizado: "ALV" | "CHE" | "PIN" ...
+  job           String? // sub-etapa: "Chapisco" | "Emboço" | "Primeira fiada"
+  local         String // floor da origem: "2º ANDAR" | "TÉRREO" | "LAZER"
+  unidade_id    String? // casado quando o local/serviço é unidade vendável (snapshot do Core)
+  inicio        String? // ISO YYYY-MM-DD
+  fim           String? // ISO YYYY-MM-DD
+  critico       Boolean  @default(false)
+  predecessores String? // ids da origem (para listar pendências)
+  created_at    DateTime @default(now())
+
+  @@index([obra_id])
+  @@index([unidade_id])
+  @@index([pacote])
+  @@map("cronograma_tarefas")
+}
+
+/// PIPELINE de entrega (específico): uma linha por etapa de uma unidade.
+/// tipo = construcao | inspecao_final | vistoria_cliente | entrega_chaves
+model EtapaUnidade {
+  id            String   @id @default(uuid())
+  unidade_id    String // snapshot do Core
+  unidade_label String
+  obra_id       String?
+  tipo          String
+  situacao      String   @default("nao_iniciada") // nao_iniciada | em_andamento | concluida | desconsiderada
+  previsto_de   String?
+  previsto_ate  String?
+  realizado_de  String?
+  realizado_ate String?
+  observacao    String?
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  itens ItemEtapa[]
+
+  @@index([unidade_id])
+  @@index([tipo])
+  @@map("etapas_unidade")
+}
+
+/// AGENDAMENTO / item de uma etapa (genérico — serve também à visita de assistência
+/// técnica no futuro). situacao = agendada | reprovada | aprovada | nao_realizado
+model ItemEtapa {
+  id               String   @id @default(uuid())
+  etapa_id         String
+  situacao         String   @default("agendada")
+  responsavel_id   String?
+  responsavel_nome String?
+  cliente_id       String?
+  cliente_nome     String?
+  previsto_de      String?
+  previsto_ate     String?
+  realizado_de     String?
+  realizado_ate    String?
+  instancia_id     String? // FormularioInstancia aplicada neste item
+  observacao       String?
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+
+  etapa EtapaUnidade @relation(fields: [etapa_id], references: [id], onDelete: Cascade)
+
+  @@index([etapa_id])
+  @@map("itens_etapa")
+}
+
+/// MOTOR DE FORMULÁRIOS — template versionado (catálogo). Candidato a ser promovido ao
+/// Core quando o JustAssistencia nascer (ambos reusam). `estrutura` = JSON de grupos→itens.
+model FormularioModelo {
+  id         String   @id @default(uuid())
+  codigo     String // "FVC" | "V&T"
+  nome       String
+  versao     Int      @default(1)
+  ativo      Boolean  @default(true)
+  estrutura  String // JSON: [{grupo:"SALA", itens:["Piso cerâmico","Pintura parede"]}]
+  created_at DateTime @default(now())
+
+  @@index([codigo])
+  @@map("formulario_modelos")
+}
+
+/// MOTOR DE FORMULÁRIOS — instância preenchida (congela a versão do modelo aplicada).
+model FormularioInstancia {
+  id            String   @id @default(uuid())
+  modelo_id     String
+  modelo_codigo String
+  modelo_versao Int
+  unidade_id    String
+  unidade_label String
+  respostas     String // JSON: [{item, grupo, status:conforme|nao_conforme|na, obs, foto_doc_id}]
+  total_nc      Int      @default(0)
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  ncs NaoConformidade[]
+
+  @@index([unidade_id])
+  @@map("formulario_instancias")
+}
+
+/// NÃO-CONFORMIDADE / PENDÊNCIA — fluxo (abertura → análise → ação → reverificação →
+/// fechamento), não campo. Registro único de "problema encontrado":
+///  - severidade=critica  → abre TRATATIVA (causa raiz + ações, plano de qualidade) e
+///    BLOQUEIA a entrega das chaves;
+///  - severidade baixa/media/alta → vira PENDÊNCIA, categorizada (disciplina) e distribuída
+///    a uma equipe de resolução (lista de pendências / SLA pós-obra).
+model NaoConformidade {
+  id              String   @id @default(uuid())
+  instancia_id    String?
+  unidade_id      String
+  unidade_label   String
+  titulo          String
+  descricao       String?
+  severidade      String   @default("media") // baixa | media | alta | critica
+  origem          String   @default("inspecao_final") // construcao | inspecao_final | vistoria_cliente | manual
+  categoria       String? // disciplina p/ distribuir às equipes: "Pintura" | "Elétrica" | "Hidráulica" ...
+  equipe          String? // equipe/empreiteiro responsável pela resolução
+  tipo            String? // classificação da NC (acabamento, instalação, estrutura ...)
+  causa_raiz      String? // tratativa (NC crítica): análise de causa
+  acoes           String? // tratativa (NC crítica): plano de ação / resumo das ações
+  dias_resolucao  Int? // prazo em dias para resolução (SLA)
+  foto_doc_id     String? // (legado) 1ª foto no GED — ver `fotos` p/ múltiplas
+  fotos           String? // JSON: ["docId1","docId2"] — 1+ evidências fotográficas no GED
+  status          String   @default("aberta") // aberta | em_correcao | reverificar | corrigida | aceita
+  responsavel     String?
+  prazo           String?
+  reverificada_em String?
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  instancia FormularioInstancia? @relation(fields: [instancia_id], references: [id], onDelete: SetNull)
+
+  @@index([unidade_id])
+  @@index([status])
+  @@index([severidade])
+  @@index([categoria])
+  @@map("nao_conformidades")
+}
+
+/// TERMO assinado (vistoria / entrega de chaves) — prova legal; PDF arquivado no GED.
+/// tipo = vistoria_cliente | entrega_chaves. modalidade = aceite | aceite_com_ressalvas.
+model Termo {
+  id             String   @id @default(uuid())
+  unidade_id     String
+  unidade_label  String
+  cliente_id     String?
+  cliente_nome   String
+  cliente_cpf    String?
+  tipo           String
+  modalidade     String?
+  protocolo      String   @unique // "JV-000123"
+  conteudo       String // JSON congelado (texto, itens entregues, NCs ressalvadas)
+  assinatura_img String // PNG dataURL (canvas)
+  assinado_em    String
+  hash           String // SHA-256 do payload (integridade)
+  ged_doc_id     String? // PDF no GED do Core
+  created_at     DateTime @default(now())
+
+  @@index([unidade_id])
+  @@map("termos")
+}

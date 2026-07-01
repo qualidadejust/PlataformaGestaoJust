@@ -10,6 +10,7 @@ export default defineConfig({
     // O GED é do Core: todos os dados (documentos, tipos, cadastros) vêm da API do JustCore.
     proxy: {
       "/api": "http://localhost:4100",
+      "/core": { target: "http://localhost:4100", rewrite: (p) => p.replace(/^\/core/, "") },
     },
   },
 });

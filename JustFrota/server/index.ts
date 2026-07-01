@@ -114,7 +114,7 @@ crud("custos-fixos", "custoFixo");
 // ---- Integração com o Core (cadastros-mestre) ----
 const CORE_URL = process.env.CORE_URL ?? "http://localhost:4100";
 async function core<T = any>(path: string): Promise<T> {
-  const r = await fetch(CORE_URL + path);
+  const r = await fetch(CORE_URL + path, { headers: { "x-internal-token": process.env.INTERNAL_TOKEN ?? "" } });
   if (!r.ok) throw new Error(`Core ${path}: HTTP ${r.status}`);
   return (await r.json()) as T;
 }

@@ -57,6 +57,23 @@ Diário de bordo, abastecimento, manutenção, custos fixos e **rateio de custos
 as obras. Espelha o app `JustFrota/` (Veiculo no Core + Viagem + `/api/rateio`).
 **Em:** `.claude/skills/frota-gestao/` (raiz — transversal).
 
+### `vistoria-entrega` — Vistoria & Entrega de obra (módulo JustVistoria)
+Pipeline por unidade (Construção→Inspeção Final→Vistoria do Cliente→Entrega das Chaves),
+checklist (reusa motor de formulários), bloqueio por NC crítica, termos jurídicos (aceite×
+ressalvas/CDC, garantia NBR 15575) com hash+assinatura em tela→GED, rastreabilidade por unidade
+e integração com o cronograma (Prevision). Espelha o app `JustVistoria/` (4800/4801).
+**Em:** `.claude/skills/vistoria-entrega/` (raiz — transversal; serve o futuro JustAssistencia).
+
+### `motor-formularios` — Motor de formulários transversal (arquitetura)
+Base única de criação de formulários/checklists para **todos os apps** (template versionado +
+instância preenchida), morando no **Core** como o GED. Define schema, tipos de resposta, regras
+(obrigatório/condicional/gera-NC), anexos→GED e o caminho de adoção incremental (promover os
+modelos genéricos já existentes no JustVistoria ao Core). **Em:** `.claude/skills/motor-formularios/`
+(raiz — transversal). **Implementado (Fase A+B)**: schema (`FormularioTipo`/`Grupo`/`Modelo`/
+`Instancia`) + rotas (`server/formularios.ts`) + builder (`src/views/FormulariosView.tsx`) +
+seed no Core; FVC do JustVistoria promovido. Falta a Fase C (apps consumindo o `modelo_id` do
+Core via `<FormRenderer>`). Ver seção 14 do resumo.
+
 ### `banco-dados` — Banco de dados / persistência (transversal, técnica)
 Dono da camada de dados de **todos** os apps: modelar/alterar schema, migrations, índices,
 relações, integridade, performance, **padronizar no Prisma (nunca SQL cru)**, portar

@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
 }
 
 /// ----------------------------------------------------------------------------
@@ -52,6 +52,8 @@ model Obra {
   id          String   @id @default(uuid())
   nome        String
   cost_center String?  @unique // centro de custo / chave de ligação com a folha
+  sienge_id   String?  @unique // ID da obra no Sienge (reconciliação financeira — ACL)
+  tipo_fiscal String   @default("MESMO_CNPJ") // MESMO_CNPJ | INTER_SPE (transferências JustEstoque)
   tipo        String   @default("obra") // obra | sede
   status      String   @default("ativa") // ativa | encerrada
   empresa_id  String?
@@ -65,6 +67,9 @@ model Obra {
 
   empresa   Empresa?   @relation(fields: [empresa_id], references: [id], onDelete: SetNull)
   alocacoes Alocacao[]
+  unidades  Unidade[]
+  locais    Local[]
+  tarefas   Tarefa[]
 
   @@map("obras")
 }
@@ -103,6 +108,7 @@ model Colaborador {
   empresa    Empresa?           @relation(fields: [empresa_id], references: [id], onDelete: SetNull)
   alocacoes  Alocacao[]
   biometrias BiometriaDigital[]
+  usuarios   Usuario[]
 
   @@index([cargo_id])
   @@index([empresa_id])
@@ -317,6 +323,9 @@ model Documento {
   versao         Int      @default(1)
   status         String   @default("vigente") // vigente | substituido | obsoleto | vencido
   valido_ate     String? // data de validade (ASO/licença/alvará) -> alerta
+  // canal de entrada + fila de conferência (ex.: documentos que chegam pelo WhatsApp/JustGate)
+  origem         String? // upload | whatsapp | ... (de onde veio o documento)
+  analise        String? // null = já efetivado | pendente | aprovado | rejeitado (fila de análise no JustDocs)
   // ponteiro para o storage
   storage_driver String   @default("local") // local | sharepoint
   sp_drive_id    String? // Graph driveId (sharepoint)
@@ -333,5 +342,412 @@ model Documento {
   @@index([tipo_codigo])
   @@index([natureza])
   @@index([setor])
+  @@index([analise])
   @@map("documentos")
+}
+
+/// Triagem pendente do JustGate (WhatsApp). Quando um colaborador manda foto/PDF pelo zap, a
+/// IA classifica e PROPÕE o lançamento; guardamos aqui o que foi detectado e esperamos o
+/// colaborador CONFIRMAR (botão no WhatsApp). LGPD: o arquivo só é gravado no GED após o
+/// confirmar — até lá fica só o `media_id` da Meta (re-baixado na confirmação). `message_id`
+/// garante idempotência (a Meta reenvia o webhook). Ver skill `justgate-whatsapp`.
+model TriagemPendente {
+  id               String   @id @default(uuid())
+  telefone         String // E.164 de quem mandou (já identificado no Core)
+  colaborador_id   String // dono do documento (= quem mandou); sem isto não cria pendente
+  colaborador_nome String
+  media_id         String // id da mídia na Cloud API (re-baixado no confirmar)
+  arquivo          String // nome do arquivo detectado
+  entidade_tipo    String   @default("colaborador")
+  tipo_codigo      String? // classificação proposta (TipoDocumento.codigo)
+  destino          String   @default("ged") // ged | atestados | treinamento — para onde a ponte leva
+  sensivel         Boolean  @default(false)
+  valido_ate       String?
+  dados_extraidos  String   @default("{}") // JSON: campos do tipo (cid/dias | instrutor/vencimento...)
+  resumo           String?
+  confianca        String?
+  message_id       String   @unique // idempotência do webhook da Meta
+  status           String   @default("aguardando") // aguardando | confirmado | cancelado | expirado
+  doc_id           String? // documento gerado no GED após confirmar
+  expira_em        DateTime
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+
+  @@index([telefone])
+  @@index([status])
+  @@map("triagem_pendentes")
+}
+
+/// ----------------------------------------------------------------------------
+/// CLIENTE / UNIDADE — base do módulo de Vistoria & Entrega (consumida pelo JustVistoria
+/// e, no futuro, pelo JustAssistencia). Cadastro-mestre: a unidade física e o comprador.
+/// As transações (etapas, checklist, NCs, termos) ficam no app e referenciam estes IDs +
+/// snapshot. Ver skill `vistoria-entrega` e seção 13 do resumo.
+/// ----------------------------------------------------------------------------
+model Cliente {
+  id         String   @id @default(uuid())
+  nome       String
+  cpf        String?
+  email      String?
+  telefone   String?
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  unidades Unidade[]
+
+  @@map("clientes")
+}
+
+/// Unidade física entregável: apartamento (vendável) ou local comum (área comum, garagem,
+/// fachada, pavimento). Amarra à Obra do Core → bloco → pavimento → unidade. `sublocais` é
+/// JSON serializado (quarto/suíte/sacada…). Semeada pelo importador do cronograma Prevision.
+model Unidade {
+  id            String   @id @default(uuid())
+  obra_id       String
+  cliente_id    String? // comprador (nulo até vender)
+  categoria     String   @default("apartamento") // apartamento | area_comum | garagem | fachada | pavimento
+  bloco         String?
+  pavimento     String?
+  identificador String // rótulo legível: "BL 07 - APTO 41" | "APTO 204"
+  codigo        String? // código do local (estilo Mobuss): "01.07.04.041"
+  sublocais     String? // JSON: [{nome:"Suíte", tipo:"suite"}, ...]
+  area_m2       Float?
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  obra    Obra     @relation(fields: [obra_id], references: [id], onDelete: Cascade)
+  cliente Cliente? @relation(fields: [cliente_id], references: [id], onDelete: SetNull)
+
+  @@index([obra_id])
+  @@index([cliente_id])
+  @@map("unidades")
+}
+
+/// ----------------------------------------------------------------------------
+/// CONTROLE DE ACESSO (auth centralizado no Core). Ver skill `controle-acesso`.
+/// Usuario aponta para o Colaborador (quem é a pessoa). Senha em bcrypt (nunca em claro).
+/// Autorização por perfil (RBAC): Perfil tem Permissoes (chave `modulo.recurso.acao`).
+/// LogAcesso = trilha de auditoria append-only (LGPD).
+/// ----------------------------------------------------------------------------
+model Usuario {
+  id               String    @id @default(uuid())
+  email            String    @unique // login
+  senha_hash       String // bcrypt (custo >= 12). NUNCA a senha em claro.
+  colaborador_id   String? // quem é a pessoa (nome/cargo vêm do cadastro)
+  ativo            Boolean   @default(true)
+  senha_temporaria Boolean   @default(true) // força troca no 1º acesso
+  ultimo_login     DateTime?
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
+
+  colaborador Colaborador?    @relation(fields: [colaborador_id], references: [id], onDelete: SetNull)
+  perfis      UsuarioPerfil[]
+  logs        LogAcesso[]
+
+  @@index([colaborador_id])
+  @@map("usuarios")
+}
+
+model Perfil {
+  id         String   @id @default(uuid())
+  nome       String   @unique // admin | rh | sst | qualidade | gestor_obra | leitura ...
+  descricao  String?
+  ativo      Boolean  @default(true)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  usuarios    UsuarioPerfil[]
+  permissoes  PerfilPermissao[]
+
+  @@map("perfis")
+}
+
+model Permissao {
+  id        String   @id @default(uuid())
+  chave     String   @unique // `modulo.recurso.acao` ex.: core.colaborador.read, ged.sensivel.read
+  descricao String?
+  created_at DateTime @default(now())
+
+  perfis PerfilPermissao[]
+
+  @@map("permissoes")
+}
+
+model UsuarioPerfil {
+  id         String   @id @default(uuid())
+  usuario_id String
+  perfil_id  String
+  created_at DateTime @default(now())
+
+  usuario Usuario @relation(fields: [usuario_id], references: [id], onDelete: Cascade)
+  perfil  Perfil  @relation(fields: [perfil_id], references: [id], onDelete: Cascade)
+
+  @@unique([usuario_id, perfil_id])
+  @@index([perfil_id])
+  @@map("usuario_perfis")
+}
+
+model PerfilPermissao {
+  id           String   @id @default(uuid())
+  perfil_id    String
+  permissao_id String
+  created_at   DateTime @default(now())
+
+  perfil    Perfil    @relation(fields: [perfil_id], references: [id], onDelete: Cascade)
+  permissao Permissao @relation(fields: [permissao_id], references: [id], onDelete: Cascade)
+
+  @@unique([perfil_id, permissao_id])
+  @@index([permissao_id])
+  @@map("perfil_permissoes")
+}
+
+/// Trilha de auditoria de acesso (append-only). Não guardar senha/token aqui.
+model LogAcesso {
+  id          String   @id @default(uuid())
+  usuario_id  String? // nulo em tentativa de login com email inexistente
+  acao        String // login | login_falha | acesso_sensivel | logout ...
+  recurso     String? // ex.: ged.documento, core.colaborador
+  entidade_id String? // id do recurso acessado (quando aplicável)
+  ip          String?
+  sucesso     Boolean  @default(true)
+  created_at  DateTime @default(now())
+
+  usuario Usuario? @relation(fields: [usuario_id], references: [id], onDelete: SetNull)
+
+  @@index([usuario_id])
+  @@index([created_at])
+  @@map("logs_acesso")
+}
+
+/// ----------------------------------------------------------------------------
+/// MOTOR DE FORMULÁRIOS (base de cadastro transversal — como o GED).
+/// Template versionado (`FormularioModelo`) + preenchimento (`FormularioInstancia`),
+/// consumido por TODOS os apps (vistoria, FVS, EPI, clima, triagem…). O `schema`/`config`
+/// são JSON (String, padrão do Core) — formulário novo é DADO, não tela em código.
+/// Ver skill `motor-formularios` e seção 14 do resumo.
+/// ----------------------------------------------------------------------------
+
+/// Tipo de formulário (catálogo): FVS, Vistoria & Entrega, Avaliação de Fornecedor…
+model FormularioTipo {
+  id               String   @id @default(uuid())
+  codigo           String   @unique // slug estável: fvs | fve | avf | clima ...
+  nome             String
+  sigla            String?
+  descricao        String?
+  categoria        String? // Inspeção | Avaliação de Fornecedores | Qualificação | Survey ...
+  titulo_relatorio String?
+  ativo            Boolean  @default(true)
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+
+  modelos FormularioModelo[]
+
+  @@map("formulario_tipos")
+}
+
+/// Grupo de inspeção / disciplina (Geral, Estruturas, Instalações, Acabamentos…).
+model FormularioGrupo {
+  id         String   @id @default(uuid())
+  codigo     String   @unique
+  nome       String
+  sigla      String?
+  descricao  String?
+  ativo      Boolean  @default(true)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  modelos FormularioModelo[]
+
+  @@map("formulario_grupos")
+}
+
+/// Template do formulário (versionado). `codigo` é a chave lógica (versões compartilham);
+/// nunca edite um modelo já APLICADO — gere nova versão. `estrutura` = seções→itens.
+model FormularioModelo {
+  id            String   @id @default(uuid())
+  codigo        String // chave lógica do formulário (ex.: "FVC"); versões compartilham
+  nome          String
+  descricao     String?
+  cabecalho     String?
+  tipo_id       String?
+  grupo_id      String?
+  escopo        String   @default("geral") // app/módulo: vistoria | fvs | epi | clima | geral
+  entidade_alvo String? // a que entidade a instância se amarra: unidade | obra | colaborador ...
+  revisao       String? // revisão documental do SGQ (ex.: "F-102")
+  versao        Int      @default(1)
+  ativo         Boolean  @default(true)
+  publicado     Boolean  @default(false) // rascunho × publicado (só publicado é aplicável)
+  dias_validade Int?
+  config        String? // JSON: { avaliados:{local:{informar,obrigar},...}, comportamento:{assina_responsavel,assina_avaliado,exibe_nota,calculo_nota} }
+  estrutura     String   @default("[]") // JSON: [{ secao, ordem, itens:[{ ordem, descricao, instrucoes, peso, resposta:{tipo,rotulo,opcoes,permite_na,exige_justificativa_na}, gera_nc:{...} }] }]
+  servico_sigla String? // vincula ao Servico.sigla_prancha (ex.: "FOR", "ALV", "REV"); nulo = modelo genérico
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  tipo       FormularioTipo?       @relation(fields: [tipo_id], references: [id])
+  grupo      FormularioGrupo?      @relation(fields: [grupo_id], references: [id])
+  instancias FormularioInstancia[]
+
+  @@index([codigo])
+  @@index([escopo])
+  @@index([tipo_id])
+  @@index([servico_sigla])
+  @@map("formulario_modelos")
+}
+
+/// ----------------------------------------------------------------------------
+/// BACKBONE — Obra × Serviço × Local (ACL Prevision/Sienge).
+/// Local = nó do LBS (zona→pavimento); Servico = catálogo canônico de etapas;
+/// Tarefa = célula atômica de cronograma, espelho do Prevision. Upsert por external_id (RI-01).
+/// Ver `server/integrations/` e skill `banco-dados`.
+/// ----------------------------------------------------------------------------
+
+/// Nó do breakdown de local (LBS) — espelha replication_group × floor do Prevision.
+/// Chave natural: obra_id + zona + pavimento (@@unique).
+model Local {
+  id          String   @id @default(uuid())
+  obra_id     String
+  zona        String   // replication_group: TIPOS | SUBSOLOS | FACHADAS | LAZER | PERSONALIZAÇÕES | ...
+  pavimento   String   // floor: 2º ANDAR | SUBSOLO | LAZER | COBERTURA/BARRILETE | ...
+  parte       String?  // sub-divisão opcional (uso futuro)
+  nome        String?  // rótulo de exibição ex.: "Tipos — 5º Andar"
+  external_id String?  // chave no Prevision (referência; a chave Just é obra+zona+pavimento)
+  origem      String   @default("PREVISION") // PREVISION | MANUAL
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  obra    Obra     @relation(fields: [obra_id], references: [id], onDelete: Cascade)
+  tarefas Tarefa[]
+
+  @@unique([obra_id, zona, pavimento])
+  @@index([obra_id])
+  @@map("locais")
+}
+
+/// Catálogo canônico de serviços/etapas construtivas. `sigla_prancha` = prefixo do service
+/// no Prevision (ALV, PIL, HID, VIG/LAJ/ESC…) e identificador nas pranchas do projeto.
+model Servico {
+  id               String   @id @default(uuid())
+  nome             String   // nome completo normalizado ex.: "ALVENARIA DE BLOCOS CERÂMICOS"
+  sigla_prancha    String   @unique // prefixo Prevision e prancha (ALV, PIL, HID, GES…)
+  codigo_prevision String?  // id no Prevision quando diferente da sigla
+  codigo_sienge    String?  // código de EAP no Sienge (reconciliação futura)
+  ativo            Boolean  @default(true)
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+
+  tarefas Tarefa[]
+
+  @@map("servicos")
+}
+
+/// Célula atômica Obra × Local × Serviço + cronograma + avanço. Espelha uma linha do
+/// CSV/API Prevision. `external_id` = id Prevision (+ "_" + part_counter quando ≥ 2).
+/// Upsert idempotente por `external_id` (RI-01). Avanço vem do pull noturno (RI-02).
+model Tarefa {
+  id               String    @id @default(uuid())
+  obra_id          String
+  local_id         String
+  servico_id       String
+  external_id      String    @unique // id Prevision [+ "_" + part_counter quando ≥ 2]
+  origem           String    @default("PREVISION") // PREVISION | MANUAL
+  job              String?   // sub-etapa: "Primeira fiada", "Execução da alvenaria", ...
+  // cronograma
+  baseline_inicio  DateTime?
+  baseline_fim     DateTime?
+  real_inicio      DateTime?
+  real_fim         DateTime?
+  duracao          Float?    // dias úteis
+  critico          Boolean   @default(false)
+  // avanço físico (atualizado pelo syncJob)
+  avanco_pct       Float     @default(0)
+  // rastreabilidade do Prevision
+  predecessores    String?   // ids predecessores (vírgula-separados)
+  successores      String?   // ids sucessores (vírgula-separados)
+  material_resources String?
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
+
+  obra    Obra    @relation(fields: [obra_id], references: [id], onDelete: Cascade)
+  local   Local   @relation(fields: [local_id], references: [id])
+  servico Servico @relation(fields: [servico_id], references: [id])
+
+  @@index([obra_id])
+  @@index([local_id])
+  @@index([servico_id])
+  @@map("tarefas")
+}
+
+/// Preenchimento de um formulário (congela a versão do modelo). Polimórfico
+/// (entidade_tipo+entidade_id), serve a qualquer app. Anexos/fotos → GED (guarda doc_id).
+model FormularioInstancia {
+  id             String    @id @default(uuid())
+  modelo_id      String
+  modelo_codigo  String
+  modelo_versao  Int
+  escopo         String? // herdado do modelo (filtra por app)
+  entidade_tipo  String? // unidade | obra | colaborador | entrega_epi ...
+  entidade_id    String?
+  entidade_label String?
+  respostas      String    @default("[]") // JSON: [{ secao, item, tipo, valor, status, obs, fotos:[docId] }]
+  nota           Float?
+  total_nc       Int       @default(0)
+  resumo         String? // JSON livre (ex.: { por_secao, criticas })
+  autor_id       String?
+  autor_nome     String?
+  assinaturas    String? // JSON: { responsavel:{nome,img,em}, avaliado:{nome,img,em} }
+  preenchido_em  DateTime?
+  created_at     DateTime  @default(now())
+  updated_at     DateTime  @updatedAt
+
+  modelo FormularioModelo @relation(fields: [modelo_id], references: [id])
+
+  @@index([modelo_id])
+  @@index([escopo])
+  @@index([entidade_tipo, entidade_id])
+  @@map("formulario_instancias")
+}
+
+/// Override da sequência de qualidade por serviço/obra. Quando o cronograma Prevision
+/// não reflete a ordem de qualidade, o engenheiro cadastra aqui a dependência explícita.
+/// obra_id nulo = regra global (vale para todas as obras).
+model SequenciaQualidade {
+  id               String   @id @default(uuid())
+  obra_id          String?  // null = global; ID da Obra no Core quando específico
+  servico_sigla    String   // Servico.sigla_prancha que deve ser verificado (ex.: "REV")
+  depende_de_sigla String   // Servico.sigla_prancha que precisa estar aprovado antes (ex.: "CHA")
+  ordem            Int      @default(0)
+  ativo            Boolean  @default(true)
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+
+  @@unique([obra_id, servico_sigla, depende_de_sigla])
+  @@index([servico_sigla])
+  @@index([obra_id])
+  @@map("sequencia_qualidade")
+}
+
+/// NC gerada pelo motor de formulários (transversal: FVS, Vistoria, EPI...).
+/// Cada item "não conforme" com gera_nc.ativo = true abre uma NC ao concluir a instância.
+model NaoConformidade {
+  id                         String    @id @default(uuid())
+  instancia_id               String    // FormularioInstancia que originou a NC
+  item_ref                   String    // "secao_ordem:item_ordem" — referência à resposta
+  descricao                  String    // cópia da observação do item (o que está errado)
+  causa                      String?   // causa raiz
+  acao_corretiva             String?   // o que vai ser feito
+  responsavel_id             String?   // ID do Colaborador no Core
+  responsavel_nome           String?   // snapshot
+  prazo                      DateTime?
+  severidade                 String    @default("media") // baixa | media | alta | critica
+  status                     String    @default("aberta") // aberta | em_acao | reverificacao | fechada
+  instancia_reverificacao_id String?   // FormularioInstancia criada na reverificação
+  aberta_em                  DateTime  @default(now())
+  fechada_em                 DateTime?
+  created_at                 DateTime  @default(now())
+  updated_at                 DateTime  @updatedAt
+
+  @@index([instancia_id])
+  @@index([status])
+  @@map("nao_conformidades")
 }

@@ -17,6 +17,8 @@ export default defineConfig({
     host: "0.0.0.0",
     proxy: {
       "/api": "http://localhost:4100",
+      // o próprio Core é o "core"; usado pelo login (/core/api/auth/...)
+      "/core": { target: "http://localhost:4100", rewrite: (p) => p.replace(/^\/core/, "") },
     },
   },
 });

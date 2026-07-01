@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, Clock } from "lucide-react";
 import { api } from "../lib/api.ts";
+import { abrirDoc } from "../api-base.ts";
 import { cn } from "../lib/cn.ts";
 
 interface Doc {
@@ -92,9 +93,9 @@ export default function VencimentosView() {
                 </td>
                 <td className="max-w-xs truncate px-2 py-1.5">{d.nome_original}</td>
                 <td className="px-2 py-1.5 text-right">
-                  <a href={d.download_url} target="_blank" rel="noreferrer" className="text-teal-600 hover:underline">
+                  <button onClick={() => abrirDoc(d.download_url)} type="button" className="text-teal-600 hover:underline">
                     abrir
-                  </a>
+                  </button>
                 </td>
               </tr>
             ))}

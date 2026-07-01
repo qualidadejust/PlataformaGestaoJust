@@ -1,0 +1,20 @@
+{
+  "name": "just-gateway",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Gateway de deploy: sobe os backends da Plataforma JUST em portas internas e roteia tudo por um proxy reverso no $PORT (1 serviço Render).",
+  "scripts": {
+    "start": "tsx index.ts"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "express": "^4.21.2",
+    "http-proxy-middleware": "^3.0.3",
+    "jsonwebtoken": "^9.0.3"
+  },
+  "devDependencies": {
+    "@types/jsonwebtoken": "^9.0.10",
+    "tsx": "^4.21.0"
+  }
+}

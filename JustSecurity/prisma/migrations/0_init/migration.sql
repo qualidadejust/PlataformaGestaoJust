@@ -1,6 +1,9 @@
+-- CreateSchema
+CREATE SCHEMA IF NOT EXISTS "public";
+
 -- CreateTable
 CREATE TABLE "entregas" (
-    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    "id" SERIAL NOT NULL,
     "colaborador_id" TEXT,
     "colaborador_nome" TEXT NOT NULL,
     "colaborador_matricula" TEXT,
@@ -20,12 +23,14 @@ CREATE TABLE "entregas" (
     "ficha_id" INTEGER,
     "bio_enrolled" INTEGER,
     "bio_match" INTEGER,
-    "bio_score" REAL
+    "bio_score" DOUBLE PRECISION,
+
+    CONSTRAINT "entregas_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "fichas" (
-    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    "id" SERIAL NOT NULL,
     "colaborador_id" TEXT,
     "colaborador_nome" TEXT NOT NULL,
     "colaborador_matricula" TEXT,
@@ -47,12 +52,14 @@ CREATE TABLE "fichas" (
     "baixa_em" TEXT,
     "baixa_obs" TEXT,
     "substitui_ficha_id" INTEGER,
-    "created_at" TEXT NOT NULL
+    "created_at" TEXT NOT NULL,
+
+    CONSTRAINT "fichas_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "inspecoes" (
-    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    "id" SERIAL NOT NULL,
     "ficha_id" INTEGER NOT NULL,
     "data" TEXT NOT NULL,
     "resultado" TEXT NOT NULL,
@@ -62,7 +69,9 @@ CREATE TABLE "inspecoes" (
     "created_at" TEXT NOT NULL,
     "inspetor_id" TEXT,
     "assinatura_img" TEXT,
-    "assinatura_tipo" TEXT
+    "assinatura_tipo" TEXT,
+
+    CONSTRAINT "inspecoes_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateIndex

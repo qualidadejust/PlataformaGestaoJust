@@ -51,6 +51,11 @@ const TIPOS: T[] = [
   // ── REGISTROS — outras entidades ─────────────────────────────────────────────
   ["termo_epi", "Termo de entrega de EPI (assinado)", "entrega_epi", "registro", "sst", false, false, false, 1825, false],
   ["evidencia_fvs", "Evidência de FVS / FVM", "fvs", "registro", "qualidade", false, false, false, 1825, false],
+  // Vistoria & Entrega (módulo JustVistoria) — prova legal da entrega, retém (vícios/garantia)
+  ["termo_vistoria_cliente", "Termo de vistoria do cliente (assinado)", "unidade", "registro", "qualidade", false, false, false, 9125, false],
+  ["termo_entrega_chaves", "Termo de entrega das chaves (assinado)", "unidade", "registro", "qualidade", false, false, false, 9125, false],
+  ["relatorio_entrega_unidade", "Relatório de entrega da unidade", "unidade", "registro", "engenharia", false, false, false, 9125, false],
+  ["foto_nc_vistoria", "Foto de não-conformidade (vistoria)", "unidade", "registro", "qualidade", false, false, false, 1825, false],
   ["certificado_material", "Certificado / laudo de material", "obra", "registro", "qualidade", false, false, false, 1825, false],
   ["crlv", "CRLV (documento do veículo)", "veiculo", "registro", null, false, false, true, 365, false],
   // Fornecedores (Aquisição / Suprimentos)

@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Upload, Download, Trash2, FilePlus2, Lock, X, Layers } from "lucide-react";
 import { api, uploadDoc } from "../lib/api.ts";
+import { abrirDoc } from "../api-base.ts";
 import { ENTIDADES, entidadeDef } from "../lib/entidades.ts";
 import { cn } from "../lib/cn.ts";
 
@@ -82,14 +83,15 @@ export default function DocumentosView() {
       fd.append("file", file);
       fd.append("entidade_tipo", entidadeTipo);
       fd.append("entidade_id", entidadeId);
+      // rótulo legível p/ a pasta no SharePoint (ex.: "emp-297 - Samuel ...").
+      // Mesma fonte de nome dos outros apps (JustTrain/JustAtestados) → pasta única, sem duplicar.
+      if (ent) fd.append("entidade_label", def.nome(ent));
       fd.append("categoria", tipoCod || "documento");
       if (tipoCod) fd.append("tipo_codigo", tipoCod);
       fd.append("sensivel", String(sensivel));
       if (validoAte) fd.append("valido_ate", validoAte);
       if (obs) fd.append("observacao", obs);
       if (substituiId) fd.append("substitui_id", substituiId);
-      // snapshot de nome da entidade — só informativo; o Core guarda os ids
-      void ent;
       return uploadDoc(fd);
     },
     onSuccess: () => {
@@ -257,9 +259,9 @@ export default function DocumentosView() {
                   <td className="px-2 py-1.5">{d.valido_ate ?? "—"}</td>
                   <td className="px-2 py-1.5">
                     <div className="flex justify-end gap-2">
-                      <a href={d.download_url} target="_blank" rel="noreferrer" title="Abrir/baixar" className="text-slate-400 hover:text-teal-600">
+                      <button onClick={() => abrirDoc(d.download_url)} type="button" title="Abrir/baixar" className="text-slate-400 hover:text-teal-600">
                         <Download className="size-4" />
-                      </a>
+                      </button>
                       <button onClick={() => novaVersao(d)} title="Nova versão" className="text-slate-400 hover:text-teal-600">
                         <FilePlus2 className="size-4" />
                       </button>

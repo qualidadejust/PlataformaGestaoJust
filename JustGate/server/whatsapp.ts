@@ -35,6 +35,35 @@ export async function sendText(to: string, body: string): Promise<void> {
   if (!r.ok) console.error("envio WhatsApp falhou:", r.status, await r.text());
 }
 
+// Envia uma mensagem com BOTÕES de resposta (reply buttons). Funcionam DENTRO da janela de
+// 24h (mensagem de sessão) — não exigem template aprovado. Máx. 3 botões; título ≤ 20 chars.
+// Cada botão volta no webhook como type=interactive → interactive.button_reply.id.
+export async function sendButtons(
+  to: string,
+  body: string,
+  buttons: { id: string; title: string }[],
+): Promise<void> {
+  if (!waConfigured()) {
+    console.log(`[wa:simulado] -> ${to}: ${body} [botões: ${buttons.map((b) => b.title).join(" | ")}]`);
+    return;
+  }
+  const r = await fetch(graph(`${PHONE_ID()}/messages`), {
+    method: "POST",
+    headers: { Authorization: `Bearer ${TOKEN()}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      to: normalizeBr(to),
+      type: "interactive",
+      interactive: {
+        type: "button",
+        body: { text: body },
+        action: { buttons: buttons.slice(0, 3).map((b) => ({ type: "reply", reply: { id: b.id, title: b.title.slice(0, 20) } })) },
+      },
+    }),
+  });
+  if (!r.ok) console.error("envio de botões WhatsApp falhou:", r.status, await r.text());
+}
+
 // Baixa uma mídia recebida (foto de atestado, PDF…) pelo media id. Usado adiante para
 // arquivar no GED (POST /api/documentos do Core). Retorna o buffer + content-type.
 export async function downloadMedia(mediaId: string): Promise<{ buffer: Buffer; contentType?: string } | null> {

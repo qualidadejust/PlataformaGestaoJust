@@ -1,15 +1,13 @@
 // Import interop-safe: o client gerado pelo Prisma 7 é CommonJS com spread,
 // então o named import ESM `{ PrismaClient }` não é detectado. Usamos default.
+import "dotenv/config";
 import prismaPkg from "@prisma/client";
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
-import path from "path";
-import { fileURLToPath } from "url";
+import { PrismaPg } from "@prisma/adapter-pg";
 
 const { PrismaClient } = prismaPkg as any;
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DB_PATH = path.resolve(__dirname, "../../prisma/dev.db");
-
-const adapter = new PrismaBetterSqlite3({ url: `file:${DB_PATH}` });
+// Postgres (Neon em prod, qualquer Postgres em dev). A connection string vem do
+// DATABASE_URL no .env — trocar de banco é configuração, nunca código.
+const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 
 export const prisma = new PrismaClient({ adapter } as any);

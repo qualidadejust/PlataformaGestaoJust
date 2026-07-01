@@ -4,6 +4,7 @@ import cors from "cors";
 import { identifyByPhone } from "./core.ts";
 import { route, type Inbound } from "./router.ts";
 import { sendText, waConfigured } from "./whatsapp.ts";
+import { processarMidia, processarBotao } from "./fluxo.ts";
 
 const app = express();
 app.use(cors());
@@ -192,12 +193,17 @@ function extractMessages(body: any): Inbound[] {
       const value = change?.value ?? {};
       const nome = value?.contacts?.[0]?.profile?.name as string | undefined;
       for (const m of value?.messages ?? []) {
+        // botões de resposta (interactive) chegam como type=interactive → button_reply.id
+        const interactiveId = m.interactive?.button_reply?.id ?? m.interactive?.list_reply?.id;
         out.push({
           from: m.from,
+          id: m.id,
           name: nome,
           type: m.type,
-          text: m.text?.body,
+          text: m.text?.body ?? m.interactive?.button_reply?.title,
           mediaId: m.image?.id ?? m.document?.id ?? m.audio?.id,
+          filename: m.document?.filename,
+          interactiveId,
         });
       }
     }
@@ -209,17 +215,36 @@ async function handleInbound(msg: Inbound): Promise<void> {
   const colaborador = await identifyByPhone(msg.from);
   const quem = colaborador ? `${colaborador.nome} (${colaborador.id})` : "desconhecido";
   console.log(`[in] ${msg.from} (${quem}) tipo=${msg.type} texto=${msg.text ?? "-"}`);
-  const reply = route(msg, colaborador);
+
+  // PORTA DE SEGURANÇA: só colaborador CADASTRADO no Core interage. Número solto é barrado
+  // antes de qualquer download/IA — ninguém manda documento para análise sem identificação.
+  if (!colaborador) {
+    const reply = route(msg, null);
+    record({ at: new Date().toISOString(), from: msg.from, name: msg.name, identificado: false, texto: msg.text ?? `[${msg.type}]`, reply, origem: "whatsapp" });
+    await sendText(msg.from, reply);
+    return;
+  }
+
+  // 1) clique em botão (confirmar/cancelar lançamento) · 2) mídia (foto/PDF → triagem → fila)
+  if (msg.type === "interactive" && msg.interactiveId) {
+    await processarBotao(msg, colaborador);
+  } else if (msg.type === "image" || msg.type === "document") {
+    await processarMidia(msg, colaborador);
+  } else {
+    const reply = route(msg, colaborador);
+    record({ at: new Date().toISOString(), from: msg.from, name: colaborador.nome, identificado: true, texto: msg.text ?? `[${msg.type}]`, reply, origem: "whatsapp" });
+    await sendText(msg.from, reply);
+    return;
+  }
   record({
     at: new Date().toISOString(),
     from: msg.from,
-    name: colaborador?.nome ?? msg.name,
-    identificado: !!colaborador,
-    texto: msg.text ?? `[${msg.type}]`,
-    reply,
+    name: colaborador.nome,
+    identificado: true,
+    texto: msg.text ?? (msg.interactiveId ? `[botão ${msg.interactiveId}]` : `[${msg.type}]`),
+    reply: "[fluxo de documento]",
     origem: "whatsapp",
   });
-  await sendText(msg.from, reply);
 }
 
 const PORT = Number(process.env.PORT ?? 4200);

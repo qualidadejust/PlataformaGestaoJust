@@ -7,7 +7,7 @@
 | `/qa-tester` | **Testar o app inteiro** — bate em todas as APIs e analisa views; gera relatório de bugs por tela | Alta — um agente faz todo o trabalho, não consome contexto principal |
 | `/ux-ui-design` | **Projetar/revisar telas e fluxos** — UX/UI sênior: heurísticas, acessibilidade (WCAG), hierarquia, design system | Média — análise e proposta de design |
 | `/ui-polish` | Diagramação/densidade tática de uma tela (cards grandes, espaçamento, responsividade) | Baixa |
-| `/caveman` | Dados não carregam na tela, suspeita de mock hardcoded ou backend fora | Média — checklist rápido antes de investigar código |
+| `/eleva-caveman` | Dados não carregam na tela, suspeita de mock hardcoded ou backend fora | Média — checklist rápido antes de investigar código |
 | `/verify` | Confirmar que uma mudança específica funciona na tela certa | Baixa — lança o app e interage |
 | `/code-review` | Revisar diff antes de commitar | Média |
 | `/run` | Iniciar o app (frontend porta 3000 + backend porta 3001) | — |
@@ -50,7 +50,7 @@ Configure via `/update-config`. Exemplos práticos:
 ```
 1. /run          → sobe frontend + backend
 2. /qa-tester    → subagente testa tudo e devolve relatório
-3. /caveman      → se alguma tela falhar na conexão API
+3. /eleva-caveman → se alguma tela falhar na conexão API
 4. /verify       → confirmar fix pontual em tela específica
 ```
 

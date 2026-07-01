@@ -4,7 +4,10 @@ const CORE_URL = process.env.CORE_URL ?? "http://127.0.0.1:4100";
 
 async function get<T>(path: string): Promise<T[]> {
   try {
-    const r = await fetch(`${CORE_URL}${path}`, { signal: AbortSignal.timeout(5000) });
+    const r = await fetch(`${CORE_URL}${path}`, {
+      headers: { "x-internal-token": process.env.INTERNAL_TOKEN ?? "" },
+      signal: AbortSignal.timeout(5000),
+    });
     if (!r.ok) return [];
     return (await r.json()) as T[];
   } catch {

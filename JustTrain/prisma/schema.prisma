@@ -11,7 +11,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
 }
 
 /// Catálogo de treinamentos (o "tipo": NR-35, Integração, Brigada…). Define carga
