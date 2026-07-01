@@ -1,7 +1,19 @@
-# docs/
+# docs/ — documentação de arquitetura e integrações
 
-Documentação de arquitetura e referência do monorepo.
+Documentação de referência do monorepo, separada do código para não poluir o contexto de
+cada app. **Leia `resumo-projeto.md` antes de qualquer mudança** — é a fonte de verdade de
+arquitetura, portas, schema e integração entre apps; qualquer mudança que altere isso
+**deve atualizar esse arquivo na mesma rodada** (ver regra no `CLAUDE.md` raiz).
 
-- `resumo-projeto.md` — **referência principal**: arquitetura, portas, schema, integração entre apps. Leia antes de qualquer mudança.
-- `agentes-especialistas.md` — guia para criar/manter skills de domínio
-- Integrações documentadas: Prevision (cronograma), SharePoint (storage GED), deploy Render
+Arquivos:
+- `resumo-projeto.md` — arquitetura geral, mapa de portas, stack, schema do Core, deploy
+  (Render/Neon/SharePoint), GED, motor de formulários, backbone ACL Prevision/Sienge.
+- `agentes-especialistas.md` — quando criar uma nova skill de domínio para um módulo.
+- `deploy-render.md` — guia passo a passo do deploy (Blueprint, variáveis por serviço,
+  biometria via túnel, migrations).
+- `integracao-sharepoint.md`, `integracao-email.md`, `setup-email-m365-admin.md`,
+  `integracao-prevision.md` — detalhes de cada integração externa (credenciais, fluxo,
+  troubleshooting) citadas no resumo.
+
+Estes documentos de integração só são necessários ao mexer na integração específica —
+não precisam ser lidos para trabalho geral em um app.

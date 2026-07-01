@@ -18,10 +18,13 @@ export type Evaluation = {
   submitted_at?: string;
   strengths?: string;
   opportunities?: string;
+  feedback_date?: string;
+  reflection_strengths?: string;
+  reflection_difficulties?: string;
+  reflection_competencies?: string;
   avg_score?: number | null;
-  avg_potential?: number | null;
   employee_department?: string;
-  scores?: { question_id: string; score: string }[];
+  scores?: { question_id: string; score: string; justification?: string | null }[];
   potential_scores?: { question_id: string; score: number }[];
   is_manager?: number;
   template?: EvaluationTemplate | null;
@@ -70,15 +73,43 @@ export function useCreateEvaluation() {
 export function useSaveScores() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, scores, potential_scores, status, strengths, opportunities, feedback_date }: {
+    mutationFn: ({
+      id,
+      scores,
+      justifications,
+      status,
+      strengths,
+      opportunities,
+      feedback_date,
+      reflection_strengths,
+      reflection_difficulties,
+      reflection_competencies,
+    }: {
       id: string;
-      scores?: Record<string, string | number | null>;
-      potential_scores?: Record<string, number | null>;
+      scores?: Record<string, string | null>;
+      justifications?: Record<string, string>;
       status?: string;
       strengths?: string;
       opportunities?: string;
       feedback_date?: string;
-    }) => fetchJSON<{ ok: boolean }>(`${BASE}/${id}/scores`, { method: 'PUT', body: JSON.stringify({ scores, potential_scores, status, strengths, opportunities, feedback_date }) }),
+      reflection_strengths?: string;
+      reflection_difficulties?: string;
+      reflection_competencies?: string;
+    }) =>
+      fetchJSON<{ ok: boolean }>(`${BASE}/${id}/scores`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          scores,
+          justifications,
+          status,
+          strengths,
+          opportunities,
+          feedback_date,
+          reflection_strengths,
+          reflection_difficulties,
+          reflection_competencies,
+        }),
+      }),
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ['evaluations', vars.id] });
       qc.invalidateQueries({ queryKey: ['evaluations'] });

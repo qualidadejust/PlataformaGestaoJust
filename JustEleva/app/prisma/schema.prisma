@@ -248,10 +248,13 @@ model Evaluation {
   status        String    @default("pending")
   due_date      String?
   submitted_at  DateTime?
-  strengths     String?
-  opportunities String?
-  feedback_date String?
-  created_at    DateTime  @default(now())
+  strengths               String?
+  opportunities           String?
+  feedback_date           String?
+  reflection_strengths    String?
+  reflection_difficulties String?
+  reflection_competencies String?
+  created_at              DateTime  @default(now())
   updated_at    DateTime  @updatedAt
 
   employee  Employee  @relation("EmployeeEvaluations", fields: [employee_id], references: [id], onDelete: Cascade)
@@ -272,6 +275,7 @@ model EvaluationScore {
   evaluation_id String
   question_id   String
   score         String?
+  justification String?
   updated_at    DateTime @updatedAt
 
   evaluation Evaluation @relation(fields: [evaluation_id], references: [id], onDelete: Cascade)
@@ -342,15 +346,15 @@ model Feedback {
 }
 
 model Calibration {
-  id            String   @id @default(uuid())
-  employee_id   String
-  cycle_id      String
-  score         Float?
-  potential     String?
-  justification String?
-  status        String   @default("draft")
-  created_at    DateTime @default(now())
-  updated_at    DateTime @updatedAt
+  id             String   @id @default(uuid())
+  employee_id    String
+  cycle_id       String
+  potential      String?
+  justification  String?
+  consensus_date String?
+  status         String   @default("draft")
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
 
   employee Employee @relation(fields: [employee_id], references: [id], onDelete: Cascade)
   cycle    Cycle    @relation(fields: [cycle_id], references: [id], onDelete: Cascade)

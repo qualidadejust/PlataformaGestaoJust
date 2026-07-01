@@ -25,6 +25,7 @@ transações** e referencia os IDs do Core (com snapshot dos dados na hora da tr
 | **JustFrota** | `JustFrota/` | 4301 | 4300 | **Gestão de frota**: diário de bordo (viagens) + custos (abastecimento/manutenção/fixos) + **rateio por km** entre as obras. Guarda só transações; veículo/motorista/obra vêm do Core. |
 | **JustAtestados** | `JustAtestados/` | 4701 | 4700 | **Atestados/declarações de comparecimento**: lançamento (apontador) → fila de análise (RH aprova/recusa) → KPIs de absenteísmo. Guarda só a transação + snapshot; colaborador/obra/cargo vêm do Core; **anexo (CID/saúde) vai pro GED do Core como sensível** (guarda só o `ged_documento_id`). Permissões `atestados.read/write/aprovar`; perfil novo `apontador`. Front adaptado do repo externo (`pridema1/atestadosJUST`): telas mantidas, camada de dados trocada por `apiDataService` (back + Core), auth/role derivado dos perfis; CID-10 como asset estático; cadastro é só-leitura do Core (criar/editar no JustCore). |
 | **JustVistoria** | `JustVistoria/` | 4801 | 4800 | **Vistoria & Entrega de obra**: pipeline por unidade (Construção→Inspeção Final→Vistoria do Cliente→Entrega das Chaves), checklist (motor de formulários), não-conformidades com bloqueio, **termos assinados em tela**→GED, relatório PDF. Cliente/Unidade vêm do Core; integra o **cronograma Prevision** (locais/pacotes/prazos). Guarda só transações. Ver skill `vistoria-entrega`. |
+| **JustFVS** | `JustFVS/` | 4900 | — | **Fichas de Verificação de Serviço (FVS/FIS)**: gestão de qualidade de obra inteira — árvore de serviços (Obra→Zona→Pavimento→Tarefa), abertura de FVS por local, gate sequencial (não abre FVS se anterior não aprovada), fluxo completo de NC, projetos/especificações por tarefa via GED. **Front-only** (sem back próprio) — consome o **motor de formulários do Core** (`/api/formularios`), backbone (`/api/tarefas`) e GED (`/api/documentos`). Ver seção 16. |
 | **JustDocs** | `JustDocs/` | 4400 | — | **GED** (gestão eletrônica de documentos): UI com 4 abas — **Pastas** (navegação tipo SharePoint: SGQ/Obras/Pessoas/Empresa), **Documentos** (enviar/consultar/versionar), **Triagem IA** (sobe até 2 arquivos, a IA propõe tipo/colaborador/sensível/validade, confere e envia ao GED) e **Vencimentos**. **Sem back/DB próprio** — consome a API do Core (proxy `/api`→4100); arquivos no SharePoint. |
 | **Biometria (.NET)** | `JustSecurity/biometria/` | — | 4002 | Serviço **SourceAFIS** (.NET) que faz o **match 1:N** das digitais. Consumido por Core e Security via HTTP. |
 
@@ -39,6 +40,7 @@ JustCore (4100)  ──►  dados-mestre (SQLite + Prisma)  ◄── BiometriaD
    ├────────────── JustGate (4200)     — WhatsApp: identifica remetente e roteia
    ├────────────── JustFrota (4300)    — frota: viagens + rateio por km entre obras
    ├────────────── JustAtestados (4700)— atestados/declarações; anexo→GED sensível do Core
+   ├────────────── JustFVS (4900)     — FVS/qualidade: front-only, consome motor+backbone+GED do Core
    └────────────── JustDocs (4400)     — GED: UI de documentos (consome a API do Core)
 JustHub (4500) — portal: cards de todos os módulos (entrada única, sem DB)
 JustTrain → gera o PDF do certificado (jsPDF, no front) e o arquiva no GED do Core (POST /api/documentos, tipo certificado_treinamento)
@@ -65,6 +67,7 @@ Biometria .NET (4002) ◄── Core e Security mandam probe+candidates; devolve
 - `prisma/schema.prisma` — provider `postgresql`. **Modelos**: `Empresa`, `Cargo`, `Obra`,
   `Colaborador`, `BiometriaDigital`, `Alocacao`, `Fornecedor`, `Setor`, `Indicador`, `Insumo`,
   `TipoDocumento`, `Documento`, `Veiculo`, `CustoCargo`, `Cliente`, `Unidade`,
+  `Local`, `Servico`, `Tarefa` (backbone ACL Prevision — ver seção 15),
   `FormularioTipo`, `FormularioGrupo`, `FormularioModelo`, `FormularioInstancia` (motor de
   formulários — ver seção 14), + controle de acesso (`Usuario`/`Perfil`/`Permissao`/`LogAcesso`).
   - `Cliente` = comprador do imóvel. `Unidade` = unidade física entregável (apartamento |
@@ -96,7 +99,9 @@ Biometria .NET (4002) ◄── Core e Security mandam probe+candidates; devolve
     retenção, obrigatório) por `entidade_tipo`. Seed (51 tipos derivados da PGQ-Lista Mestra e
     do Mapa de Controle de Registros) em `prisma/import-tipos-documento.ts`. Vocabulário
     controlado (setores/processos/classificações) em `server/lib/ged-taxonomia.ts`.
-  - `Obra` tem `cost_center` (centro de custo), empresa, status.
+  - `Obra` tem `cost_center` (centro de custo), empresa, status, `sienge_id` (ID do Sienge para
+    reconciliação financeira — ACL) e `tipo_fiscal` (`MESMO_CNPJ` | `INTER_SPE`, define modo de
+    transferência no JustEstoque).
   - `Insumo` = catálogo de EPIs (com C.A.), materiais, ferramentas, equipamentos.
   - `Alocacao` = colaborador × obra × período (papel, principal, responsável).
   - `BiometriaDigital` = templates de digital do colaborador (cadastro é no Core).
@@ -140,9 +145,10 @@ Biometria .NET (4002) ◄── Core e Security mandam probe+candidates; devolve
 
 ## 6. JustSecurity — segurança do trabalho
 
-- `server/db.ts` — SQLite (`data/justsecurity.db`) **direto com better-sqlite3** (não
-  usa Prisma). Schema + seed locais. Guarda só **entregas** e **fichas**; colaboradores e
-  EPIs vêm do Core.
+- **Portado para Prisma + Postgres (Neon)**, como os demais apps com dados — já não usa
+  `server/db.ts`/better-sqlite3 (schema legado preservado: `id` Int autoincrement, datas
+  `String`). Client em `server/lib/prisma.ts`. Guarda só **entregas** e **fichas**;
+  colaboradores e EPIs vêm do Core.
 - `server/index.ts` (Express:4001). Rotas: `/api/entregas` (+ `/verificacao`),
   `/api/fichas` (+ `/resumo`, `/:id`, `/:id/historico`, `/:id/inspecoes`, `/:id/baixa`),
   `/api/biometria/health|verify`. Colaboradores/EPIs **não** têm rota aqui — a UI consome
@@ -276,10 +282,11 @@ em `JustCore/prisma/` (`import-*.ts`). Chaves/segredos nunca no front.
     compartilhadas e spin-down após 15 min; 6 serviços separados não cabem). **Implementado em
     `gateway/`** (Fase 2): NÃO dá pra montar os 6 Express como routers num só processo porque
     cada app tem o seu **Prisma Client** gerado sob o mesmo nome `@prisma/client` (colidem). Em
-    vez disso, o `gateway/index.ts` sobe os 6 backends como **processos-filhos** em portas
-    internas fixas (Core 4100, Eleva 3001, Security 4001, Train 4600, Frota 4300, Gate 4200) e
-    roda um **proxy reverso** (http-proxy-middleware) no `$PORT` roteando por path
-    (`/core`,`/eleva`,…; o prefixo é removido). Cada app mantém seu node_modules/Prisma Client.
+    vez disso, o `gateway/index.ts` sobe os 7 backends como **processos-filhos** em portas
+    internas fixas (Core 4100, Eleva 3001, Security 4001, Train 4600, Frota 4300, Gate 4200,
+    Atestados 4700) e roda um **proxy reverso** (http-proxy-middleware) no `$PORT` roteando por
+    path (`/core`,`/eleva`,`/security`,`/train`,`/frota`,`/gate`,`/atestados`; o prefixo é
+    removido). Cada app mantém seu node_modules/Prisma Client.
     Apps que lêem `process.env.PORT` (Eleva/Frota/Gate) recebem a porta interna explícita do
     gateway. Chamadas **entre apps** continuam diretas (`127.0.0.1:4100`), sem passar pelo proxy.
     Cada backend ganhou script **`start`** (`tsx server/index.ts`, sem watch/vite/biometria).
@@ -355,7 +362,9 @@ consome `/api/documentos`, `/api/ged/taxonomia`, `/api/tipos-documento` e os cad
 Telas: **Pastas** (`PastasView` — navegação tipo SharePoint com breadcrumb, derivada da
 taxonomia: 4 raízes **SGQ** [docs padrão por processo→classificação], **Obras** [por obra→setor],
 **Pessoas** [por colaborador] e **Empresa** [setores globais] — a "pasta" é visão, não caminho),
-**Documentos** (upload/versão/download) e **Vencimentos**. Catálogo de tipos semeado por
+**Documentos** (upload/versão/download), **Fila de Análise** (`FilaView`), **Cronograma**
+(`CronogramaView` — ligado ao backbone Local/Serviço/Tarefa, seção 15) e **Vencimentos**.
+Catálogo de tipos semeado por
 `JustCore/prisma/import-tipos-documento.ts` e editável na tela do Core. Evolução prevista
 (ver skill `ged-documentos`): acesso por perfil + trilha de auditoria (depende de auth no
 Core), alerta de vencimento (via JustGate/WhatsApp), busca full-text (Graph).
@@ -496,7 +505,133 @@ TODOS os apps (vistoria, FVS, EPI, clima, triagem, assistência). Mora no **Core
   compartilhado) lê o JSON e monta a tela. Migration aditiva `20260625140000_motor_formularios`
   no Neon `justcore` (4 tabelas novas).
 
-## 15. CLAUDE.md por pasta — índice rápido
+## 15. Backbone ACL — Local, Serviço, Tarefa (Prevision/Sienge)
+
+**Célula atômica** da plataforma: `Obra × Serviço × Local`. Todo módulo (JustDocs, FVS, NC,
+Estoque, AT) é uma "lente" sobre essa célula. Regra de ouro: **cada campo tem um único dono** —
+nunca two-way sync. Prevision é fonte da LBS/cronograma; Sienge é fonte do fiscal/orçamento.
+
+### Models (Core `prisma/schema.prisma`)
+
+- **`Local`** — nó da LBS (`zona` = `replication_group` do Prevision, `pavimento` = `floor`).
+  Chave natural: `@@unique([obra_id, zona, pavimento])`. `external_id` = referência Prevision.
+  `origem` = `PREVISION | MANUAL`. Relação: `Obra → Local[] → Tarefa[]`.
+
+- **`Servico`** — catálogo canônico de etapas construtivas. `sigla_prancha` (`@@unique`) =
+  prefixo do `service` no CSV (`ALV`, `PIL`, `HID`, `VIG/LAJ/ESC`, `GES`…). Guarda também
+  `codigo_prevision` e `codigo_sienge` para reconciliação futura.
+
+- **`Tarefa`** — espelho de uma linha do cronograma Prevision. `external_id` (`@@unique`) =
+  id Prevision (+ `_` + `part_counter` quando ≥ 2). Campos: `baseline_inicio/fim`,
+  `real_inicio/fim`, `duracao`, `critico`, `avanco_pct`, `predecessores`, `successores`.
+  Upsert idempotente por `external_id` (RI-01 — pode rodar N vezes com o mesmo CSV).
+
+- **`Obra`** ganhou `sienge_id` (`@@unique`) e `tipo_fiscal` (`MESMO_CNPJ | INTER_SPE`) para
+  integração Sienge (JustEstoque Fase E).
+
+### ACL Integration Module (`server/integrations/`)
+
+```
+previsionClient.ts           — parser de CSV exportado do Prevision
+mappers/prevision.ts         — PrevisionRow → {locais, servicos, tarefas} com extractSigla()
+sync/syncPrevision.ts        — upsert idempotente (RI-01): Local → Servico → Tarefa em seq.
+routes.ts                    — rotas Express registradas em registerIntegrations()
+```
+
+**Rotas ACL (Core 4100)**:
+- `POST /api/integrations/prevision/sync` — recebe CSV (multipart `csv` + `obra_id`, ou JSON
+  `{ obra_id, csv_content }`). Retorna `{ linhas_lidas, resultado: { locais, servicos, tarefas, errors } }`.
+  Perm `core.integracao.write`.
+- `GET /api/integrations/prevision/status/:obra_id` — contagem de locais/tarefas por obra.
+  Perm `core.integracao.read`.
+- `GET /api/integrations/status` — stub REST para o Sienge (RI-04).
+
+**Rotas CRUD backbone (Core 4100)**:
+- `GET|POST|PUT|DELETE /api/locais` (include: obra; perm `core.cadastro`)
+- `GET|POST|PUT|DELETE /api/servicos` (perm `core.cadastro`)
+- `GET|POST|PUT|DELETE /api/tarefas` (include: local, servico; perm `core.cadastro`)
+
+**Migration**: `20260630120000_backbone_local_servico_tarefa` — aplicada ao Neon `justcore`.
+
+**Regras de integração (RI-01 a RI-04)**:
+- RI-01 — upsert idempotente por `external_id` (N rodadas = mesmo resultado).
+- RI-02 — pull agendado (cron noturno) + botão manual; webhook só Fase 2.
+- RI-03 — compra/custo sempre ancorado no Sienge (Just nunca cria entrada de compra).
+- RI-04 — Just expõe REST para o Sienge consumir status de documentos/FVS/NC (stub pronto).
+
+**Próximo passo** (Fase A): JustDocs + JustFVS usando `tarefa_id` como âncora da célula.
+
+## 16. JustFVS — Fichas de Verificação de Serviço (porta 4900)
+
+App de **gestão de qualidade de obra** (PBQP-H). **Front-only** — sem back/DB próprio; consome
+o **Core (4100)**: motor de formulários, backbone Local/Serviço/Tarefa, GED e auth.
+
+**Tela Cronograma** (`CronogramaView`): árvore Obra→Zona→Pavimento→Tarefa (dados do backbone),
+com botão "FVS" por tarefa. Avanço físico do Prevision visível (barra + %). Tarefas bloqueadas
+pelo gate sequencial exibem cadeado e motivo.
+
+**Tela Fichas FVS** (`FvsListaView`): listagem de todas as `FormularioInstancia` com
+`escopo=fvs` por obra — status (rascunho / conforme / com NC), autor, data.
+
+**Tela Gestão** (`GestaoView`): painel por obra cruzando `Tarefa × FormularioInstancia`. Para
+cada tarefa que tem modelo FVS aplicável, deriva status de qualidade: **a abrir** (gap por
+local) / **rascunho** / **conforme** / **pendência NC** / **bloqueada**. Filtros obra/zona/
+pavimento/serviço + contadores no topo. Performance: sempre filtrar por `obra_id` no servidor;
+`staleTime` alto na árvore de tarefas.
+
+**Tela Pendências** (`PendenciasView`): lista NCs por obra/status (abertas/em ação/reverificação/
+fechadas). Tela de tratativa (causa, ação corretiva, responsável, prazo). Botão reverificar →
+nova FVS de reverificação. NC fechada desbloqueia o próximo serviço encadeado.
+
+**Preenchimento FVS** (`NovoFvsView`): carrega o `FormularioModelo` publicado cujo
+`servico_sigla` bate com a `Tarefa.servico.sigla_prancha`. Itens conforme/não-conforme/NA com
+observação e foto (→GED). Salvar rascunho ou concluir (exige todos respondidos). Ao concluir,
+cada item NC com `gera_nc.ativo` cria uma `NaoConformidade` no Core automaticamente.
+
+**Gate sequencial** (Core-side): ao criar `FormularioInstancia` com `escopo=fvs`, o Core valida
+se a tarefa predecessora (de `Tarefa.predecessores` ou de `SequenciaQualidade` de override) tem
+FVS aprovada (concluída, `total_nc=0`, sem NC aberta). Erro 409 pt-BR se bloqueada.
+
+## 17. E-mail transversal — Microsoft 365 (Graph sendMail)
+
+**Integração transversal do Core** (como GED/motor/Gemini) para notificações, avisos, cobranças
+e relatórios. Mesma filosofia do storage: **uma interface, driver por env** — `console` (dev, só
+loga; default) × `graph` (prod). O driver Graph **reusa a mesma credencial app-only do SharePoint**
+(`SP_TENANT_ID`/`SP_CLIENT_ID`/`SP_CLIENT_SECRET`) — token compartilhado em
+`server/lib/graph/token.ts` (extraído do `storage/sharepoint.ts`). Escolha via Graph `sendMail`
+(não SMTP), à prova da desativação do Basic Auth pela Microsoft. Ver `docs/integracao-email.md`.
+
+- **Código:** `server/lib/email/` (`types`, `console`, `graph`, `index` com `enviarEmail()` +
+  `layoutPtBr()`); rotas em `server/emails.ts` (`registerEmails`).
+- **Rotas (Core 4100, perm `core.email.write`):** `POST /api/emails/enviar` (corpo `EmailInput`
+  `{ to, subject, html|texto, cc?, replyTo? }`) e `POST /api/emails/testar` (`{ para }`).
+  Consumível por telas (JWT) e por outros apps server-to-server (`x-internal-token`, como o GED).
+  Cada envio grava `logAcesso` (`email_enviado`/`email_teste`/`email_falha`) sem corpo/destinatário.
+- **Anti-abuso:** `server/lib/rate-limit.ts` (rate limit em memória por ator; `EMAIL_RATE_MAX`/
+  `EMAIL_RATE_WINDOW_MS`, default 60/min; chamadas internas isentas). **LGPD:** checklist
+  obrigatório para os gatilhos em `docs/integracao-email.md` (sem dado sensível no corpo; sensível
+  do GED só por CTA→download mediado, nunca anexo/link).
+- **Env:** `EMAIL_DRIVER` (console|graph), `EMAIL_FROM` (caixa **compartilhada** grátis, ex.
+  `naoresponda@construtorajust.com.br`), `EMAIL_REPLY_TO` (opcional). Setup M365 (caixa
+  compartilhada + `Mail.Send` + **Application Access Policy** restringindo à caixa) no doc.
+- **Permissão:** `core.email.write` (seed-acesso) — perfis `admin`/`rh`/`gestor_obra`.
+- **Ainda não feito (só a fundação):** gatilhos por evento (vencimentos GED, C.A. de EPI, NC,
+  atestados, avaliações) e relatórios agendados (cron externo grátis no Render → node-cron na
+  Hostinger, endpoint protegido por segredo).
+
+**Projetos por tarefa** (GED): `Documento` com `entidade_tipo=tarefa`, `entidade_id=tarefa.id`,
+`categoria=especificacao`, `natureza=padrao`, `tipo_codigo=espec_servico` (versionável). Painel
+"Especificação desta tarefa" no `NovoFvsView` — mestre vê o pacote certo antes de preencher.
+Cadastro em massa por serviço/zona evita upload repetido (mesmo `grupo_id` compartilhado).
+
+**Modelos FVS** (motor do Core): `FormularioModelo` com `escopo=fvs`, `servico_sigla` vinculando
+ao `Servico`. Builder em `JustCore/src/views/FormulariosView.tsx`. Seed piloto Forro:
+`npm run db:seed-fvs-for`. Pretendido: 100+ modelos — um por tipo de serviço/etapa construtiva.
+
+**Proxy Vite**: porta 4900; `/api` → Core 4100 (motor, backbone, GED, NC, auth).
+`JustFVS/src/lib/api.ts` — helper `api(path, opts)` que lança em erro com mensagem pt-BR.
+
+## 18. CLAUDE.md por pasta — índice rápido
 
 Cada pasta do monorepo tem um `CLAUDE.md` com resumo do conteúdo, stack e portas.
 O modelo deve ler o CLAUDE.md da pasta antes de explorar o código.

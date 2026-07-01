@@ -1,10 +1,19 @@
-# JustAtestados
+# JustAtestados — módulo de atestados e declarações de comparecimento
 
-Módulo de Atestados e Declarações de Comparecimento.
+App isolado (front porta 4701, back Express porta 4700) do fluxo: lançamento (perfil
+`apontador`) → fila de análise (RH aprova/recusa) → KPIs de absenteísmo. Guarda só a
+transação (`Atestado`) com snapshot do colaborador/obra/cargo — o cadastro em si é
+só-leitura do JustCore (4100). O anexo (atestado/CID, dado de saúde) nunca fica aqui: é
+arquivado como documento **sensível** no GED do Core, e este app guarda só o
+`ged_documento_id`.
 
-- **Portas**: Front 4701 / Back 4700
-- **Stack**: React 19 + Vite 6, Express 4, Prisma 7 (PostgreSQL)
-- **Papel**: lançamento (apontador) → fila de análise (RH aprova/recusa) → KPIs de absenteísmo
-- **Dados**: guarda só a transação + snapshot; colaborador/obra/cargo vêm do Core; anexo sensível (CID/saúde) vai pro GED do Core como `sensivel` (guarda só o `ged_documento_id`)
-- **Permissões**: `atestados.read/write/aprovar`; perfil `apontador`
-- **Origem**: front adaptado do repo externo (`pridema1/atestadosJUST`), camada de dados trocada por `apiDataService`
+Front adaptado do repo externo `pridema1/atestadosJUST`: telas e visual mantidos, mas a
+camada de dados foi trocada por `src/services/apiDataService.ts` (consome o back local +
+o Core via proxy `/core/...`). Permissões: `atestados.read` / `atestados.write` /
+`atestados.aprovar`.
+
+Estrutura: `prisma/` (schema), `server/` (rotas Express), `src/` (front React 19 + Vite +
+Tailwind v4). Rode com `npm run dev` (sobe front+back via concurrently); `npm run
+db:migrate`/`db:deploy` para o schema.
+
+Ver docs/resumo-projeto.md (seção 2, linha JustAtestados) para detalhes completos.

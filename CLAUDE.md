@@ -11,6 +11,21 @@ padrões de lá. **Não reexplore o código para fatos que já estão documentad
 Cada app pode ter convenções próprias mais detalhadas — siga-as ao mexer naquele app:
 - **JustEleva**: `JustEleva/app/AGENTS.md` + `JustEleva/app/docs/resumo-projeto.md`.
 
+## CLAUDE.md por pasta — leia antes de explorar arquivos
+
+A maioria das pastas de código do monorepo (raiz de cada app, `server/`, `server/lib/`,
+`src/views/`, `src/components/`, `prisma/` etc.) tem seu próprio `CLAUDE.md` com um resumo
+curto do que tem ali, por que importa e os arquivos-chave. **Diferente deste arquivo raiz,
+esses `CLAUDE.md` de subpasta não são carregados automaticamente** — ao entrar numa pasta
+para trabalhar nela, leia o `CLAUDE.md` dela **antes** de abrir os arquivos individuais; ele
+evita ter que ler tudo para entender o papel da pasta. Se o `CLAUDE.md` não bastar (precisa
+do detalhe exato de uma implementação), aí sim leia os arquivos.
+
+Ao criar uma pasta nova com propósito próprio (nova rota, nova view, novo domínio), crie o
+`CLAUDE.md` dela seguindo o mesmo padrão curto (propósito + arquivos-chave + ponteiro para a
+seção relevante de `docs/resumo-projeto.md`). Se um `CLAUDE.md` de pasta ficar desatualizado
+por causa de uma mudança sua, corrija-o na mesma rodada.
+
 ## Regra de manutenção do resumo
 
 Toda alteração deve ser **validada contra `docs/resumo-projeto.md`**:
@@ -43,6 +58,39 @@ Monorepo multi-módulo. O **JustCore (4100)** é o **dono único dos cadastros**
 verdade); os demais apps guardam **só as suas transações** e referenciam IDs do Core (com
 snapshot na hora). **Suba o JustCore primeiro.** Detalhes, portas e fluxo de biometria no
 resumo.
+
+## Workflow Git — obrigatório
+
+Repositório: `https://github.com/qualidadejust/PlataformaGestaoJust`
+Branch principal: `main`
+
+**Antes de qualquer mudança:**
+```bash
+git pull origin main          # sincroniza com o remoto
+```
+
+**Para cada tarefa/mudança:**
+1. Crie uma branch descritiva a partir da `main`:
+   ```bash
+   git checkout -b feat/nome-curto    # nova funcionalidade
+   git checkout -b fix/nome-curto     # correção de bug
+   git checkout -b chore/nome-curto   # ajuste técnico/docs
+   ```
+2. Faça os commits na branch (mensagens em inglês, breves e diretos):
+   ```bash
+   git add <arquivos>
+   git commit -m "tipo(escopo): descrição curta"
+   ```
+3. Ao terminar, abra um Pull Request para `main` (nunca commite direto na `main`):
+   ```bash
+   git push -u origin <branch>
+   gh pr create --title "título" --body "resumo da mudança"
+   ```
+
+**Regras de commit:**
+- Mensagens curtas e simples, condizentes com a mudança.
+- Nunca commite direto na `main`.
+- Um PR por tarefa/funcionalidade — mantenha o escopo fechado.
 
 ## Comandos (por app)
 

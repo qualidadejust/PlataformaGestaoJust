@@ -18,7 +18,12 @@ calibrationsRouter.get('/', async (req, res) => {
 calibrationsRouter.put('/:cycle_id', async (req, res) => {
   const { cycle_id } = req.params;
   const { entries, status } = req.body as {
-    entries: Array<{ employee_id: string; score?: number | null; potential?: string | null; justification?: string | null }>;
+    entries: Array<{
+      employee_id: string;
+      potential?: string | null;
+      justification?: string | null;
+      consensus_date?: string | null;
+    }>;
     status?: 'draft' | 'finalized';
   };
 
@@ -31,18 +36,18 @@ calibrationsRouter.put('/:cycle_id', async (req, res) => {
       prisma.calibration.upsert({
         where: { employee_id_cycle_id: { employee_id: entry.employee_id, cycle_id } },
         update: {
-          score: entry.score ?? null,
-          potential: entry.potential ?? null,
-          justification: entry.justification ?? null,
+          potential:      entry.potential      ?? null,
+          justification:  entry.justification  ?? null,
+          consensus_date: entry.consensus_date ?? null,
           ...(status ? { status } : {}),
         },
         create: {
-          employee_id: entry.employee_id,
+          employee_id:    entry.employee_id,
           cycle_id,
-          score: entry.score ?? null,
-          potential: entry.potential ?? null,
-          justification: entry.justification ?? null,
-          status: status ?? 'draft',
+          potential:      entry.potential      ?? null,
+          justification:  entry.justification  ?? null,
+          consensus_date: entry.consensus_date ?? null,
+          status:         status ?? 'draft',
         },
       })
     )

@@ -22,9 +22,6 @@ export type EvaluationItem = {
 // 1 Muito abaixo · 2 Abaixo · 3 Atende · 4 Acima · 5 Referência · NS Não sei avaliar
 export type Score = 1 | 2 | 3 | 4 | 5 | 'NS' | null;
 
-// Avaliação de Potencial (1: Discorda, 2: Concorda Parcialmente, 3: Concorda Totalmente)
-export type PotentialScore = 1 | 2 | 3 | null;
-
 export type PDIActionType = 
   | 'treinamento_formal'
   | 'leitura_orientada'
@@ -89,8 +86,3 @@ export type EvaluationTemplate = {
   blocks: EvaluationBlock[];
 };
 
-export const POTENTIAL_QUESTIONS = [
-  { id: 'pot1', text: 'Orientação para o aprendizado e adaptação rápida a novos cenários.' },
-  { id: 'pot2', text: 'Maturidade emocional sob pressão e capacidade de assumir responsabilidades maiores.' },
-  { id: 'pot3', text: 'Abrangência de análise sistêmica (vê o todo da obra/empresa, não apenas sua tarefa).' }
-];

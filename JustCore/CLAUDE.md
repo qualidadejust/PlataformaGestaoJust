@@ -1,11 +1,16 @@
-# JustCore
+# JustCore — dados-mestre da Plataforma JUST
 
-Núcleo de dados-mestre da plataforma. **Todos os outros apps dependem dele.**
+App **dono único dos cadastros** (empresas, obras, colaboradores, cargos, EPIs, biometria,
+backbone ACL, motor de formulários, GED, controle de acesso). Todos os outros apps do
+monorepo dependem dele para os cadastros — **suba o JustCore primeiro**.
 
-- **Portas**: Front 4101 / Back 4100
-- **Stack**: React 19 + Vite 6, Express 4, Prisma 7 (PostgreSQL)
-- **Papel**: dono único de cadastros — empresas, obras, colaboradores, cargos, setores, fornecedores, insumos/EPIs, veículos, clientes, unidades, indicadores, biometria (templates), GED (documentos/storage), motor de formulários, e controle de acesso (usuários/perfis/permissões)
-- **Biometria**: integra o serviço .NET SourceAFIS (porta 4002) para match 1:N de digitais
-- **GED**: modelo `Documento` é o repositório central de arquivos; outros apps enviam documentos para cá
-- **Schema**: `prisma/schema.prisma` — todos os modelos de cadastro + controle de acesso
-- **Suba primeiro**: os demais apps consomem cadastros via rotas `/api/*` ou `/core/*`
+Stack: React 19 + Vite (front, porta **4101**) + Express + Prisma 7/PostgreSQL (back, porta
+**4100**). `npm run dev` sobe front + back + o serviço de biometria .NET junto (via
+`concurrently`). CRUD genérico por entidade via `relationize()` em `server/index.ts`.
+
+Pastas principais: `prisma/` (schema + migrations + importadores), `server/` (rotas Express
+por domínio) e `src/` (front admin de tela única, dirigido por `entities.tsx`). Cada uma tem
+seu próprio `CLAUDE.md`.
+
+Ver `docs/resumo-projeto.md` seção 4 (e 12/14/15/17 para GED, motor de formulários, backbone
+ACL e e-mail).
