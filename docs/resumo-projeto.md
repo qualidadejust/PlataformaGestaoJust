@@ -145,9 +145,10 @@ Biometria .NET (4002) ◄── Core e Security mandam probe+candidates; devolve
 
 ## 6. JustSecurity — segurança do trabalho
 
-- `server/db.ts` — SQLite (`data/justsecurity.db`) **direto com better-sqlite3** (não
-  usa Prisma). Schema + seed locais. Guarda só **entregas** e **fichas**; colaboradores e
-  EPIs vêm do Core.
+- **Portado para Prisma + Postgres (Neon)**, como os demais apps com dados — já não usa
+  `server/db.ts`/better-sqlite3 (schema legado preservado: `id` Int autoincrement, datas
+  `String`). Client em `server/lib/prisma.ts`. Guarda só **entregas** e **fichas**;
+  colaboradores e EPIs vêm do Core.
 - `server/index.ts` (Express:4001). Rotas: `/api/entregas` (+ `/verificacao`),
   `/api/fichas` (+ `/resumo`, `/:id`, `/:id/historico`, `/:id/inspecoes`, `/:id/baixa`),
   `/api/biometria/health|verify`. Colaboradores/EPIs **não** têm rota aqui — a UI consome
@@ -281,10 +282,11 @@ em `JustCore/prisma/` (`import-*.ts`). Chaves/segredos nunca no front.
     compartilhadas e spin-down após 15 min; 6 serviços separados não cabem). **Implementado em
     `gateway/`** (Fase 2): NÃO dá pra montar os 6 Express como routers num só processo porque
     cada app tem o seu **Prisma Client** gerado sob o mesmo nome `@prisma/client` (colidem). Em
-    vez disso, o `gateway/index.ts` sobe os 6 backends como **processos-filhos** em portas
-    internas fixas (Core 4100, Eleva 3001, Security 4001, Train 4600, Frota 4300, Gate 4200) e
-    roda um **proxy reverso** (http-proxy-middleware) no `$PORT` roteando por path
-    (`/core`,`/eleva`,…; o prefixo é removido). Cada app mantém seu node_modules/Prisma Client.
+    vez disso, o `gateway/index.ts` sobe os 7 backends como **processos-filhos** em portas
+    internas fixas (Core 4100, Eleva 3001, Security 4001, Train 4600, Frota 4300, Gate 4200,
+    Atestados 4700) e roda um **proxy reverso** (http-proxy-middleware) no `$PORT` roteando por
+    path (`/core`,`/eleva`,`/security`,`/train`,`/frota`,`/gate`,`/atestados`; o prefixo é
+    removido). Cada app mantém seu node_modules/Prisma Client.
     Apps que lêem `process.env.PORT` (Eleva/Frota/Gate) recebem a porta interna explícita do
     gateway. Chamadas **entre apps** continuam diretas (`127.0.0.1:4100`), sem passar pelo proxy.
     Cada backend ganhou script **`start`** (`tsx server/index.ts`, sem watch/vite/biometria).
@@ -360,7 +362,9 @@ consome `/api/documentos`, `/api/ged/taxonomia`, `/api/tipos-documento` e os cad
 Telas: **Pastas** (`PastasView` — navegação tipo SharePoint com breadcrumb, derivada da
 taxonomia: 4 raízes **SGQ** [docs padrão por processo→classificação], **Obras** [por obra→setor],
 **Pessoas** [por colaborador] e **Empresa** [setores globais] — a "pasta" é visão, não caminho),
-**Documentos** (upload/versão/download) e **Vencimentos**. Catálogo de tipos semeado por
+**Documentos** (upload/versão/download), **Fila de Análise** (`FilaView`), **Cronograma**
+(`CronogramaView` — ligado ao backbone Local/Serviço/Tarefa, seção 15) e **Vencimentos**.
+Catálogo de tipos semeado por
 `JustCore/prisma/import-tipos-documento.ts` e editável na tela do Core. Evolução prevista
 (ver skill `ged-documentos`): acesso por perfil + trilha de auditoria (depende de auth no
 Core), alerta de vencimento (via JustGate/WhatsApp), busca full-text (Graph).

@@ -11,6 +11,21 @@ padrões de lá. **Não reexplore o código para fatos que já estão documentad
 Cada app pode ter convenções próprias mais detalhadas — siga-as ao mexer naquele app:
 - **JustEleva**: `JustEleva/app/AGENTS.md` + `JustEleva/app/docs/resumo-projeto.md`.
 
+## CLAUDE.md por pasta — leia antes de explorar arquivos
+
+A maioria das pastas de código do monorepo (raiz de cada app, `server/`, `server/lib/`,
+`src/views/`, `src/components/`, `prisma/` etc.) tem seu próprio `CLAUDE.md` com um resumo
+curto do que tem ali, por que importa e os arquivos-chave. **Diferente deste arquivo raiz,
+esses `CLAUDE.md` de subpasta não são carregados automaticamente** — ao entrar numa pasta
+para trabalhar nela, leia o `CLAUDE.md` dela **antes** de abrir os arquivos individuais; ele
+evita ter que ler tudo para entender o papel da pasta. Se o `CLAUDE.md` não bastar (precisa
+do detalhe exato de uma implementação), aí sim leia os arquivos.
+
+Ao criar uma pasta nova com propósito próprio (nova rota, nova view, novo domínio), crie o
+`CLAUDE.md` dela seguindo o mesmo padrão curto (propósito + arquivos-chave + ponteiro para a
+seção relevante de `docs/resumo-projeto.md`). Se um `CLAUDE.md` de pasta ficar desatualizado
+por causa de uma mudança sua, corrija-o na mesma rodada.
+
 ## Regra de manutenção do resumo
 
 Toda alteração deve ser **validada contra `docs/resumo-projeto.md`**:
