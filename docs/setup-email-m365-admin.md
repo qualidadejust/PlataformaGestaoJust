@@ -71,9 +71,15 @@ Connect-ExchangeOnline
 # 2) Criar um grupo de segurança contendo SÓ a caixa naoresponda@
 New-DistributionGroup -Name "App-Email-Just" -Type Security -Members naoresponda@construtorajust.com.br
 
-# 3) A trava: o app só pode enviar pelas caixas desse grupo
+# 2b) Descobrir o endereço/GUID REAL do grupo — o SMTP costuma sair no domínio padrão
+#     (ex.: App-Email-Just@justconstrutora.onmicrosoft.com), NÃO em @construtorajust.com.br.
+#     Use o GUID no passo 3 para evitar "the identity of the policy scope could not be resolved".
+Get-DistributionGroup -Identity "App-Email-Just" | Format-List Name,PrimarySmtpAddress,Guid
+
+# 3) A trava: o app só pode enviar pelas caixas desse grupo.
+#    Passe o GUID do passo 2b em -PolicyScopeGroupId (GUID nunca é ambíguo).
 New-ApplicationAccessPolicy -AppId 684287b3-ab2c-48f0-ab44-e340b2557f5c `
-  -PolicyScopeGroupId App-Email-Just@construtorajust.com.br `
+  -PolicyScopeGroupId <GUID-do-grupo-App-Email-Just> `
   -AccessRight RestrictAccess `
   -Description "App Just so envia pela caixa naoresponda@"
 
@@ -83,6 +89,11 @@ Test-ApplicationAccessPolicy -Identity naoresponda@construtorajust.com.br -AppId
 
 > Observação: a política pode levar alguns minutos (às vezes até ~30 min) para valer em toda a
 > organização.
+>
+> Se o `New-DistributionGroup` reclamar *"multiple recipients matching identity App-Email-Just"*,
+> o grupo já existe — pule o passo 2 e siga do 2b. Se o `New-ApplicationAccessPolicy` disser
+> *"the identity of the policy scope could not be resolved"*, foi por usar o endereço `.com.br`
+> em vez do GUID/SMTP real do grupo (passo 2b).
 
 ---
 

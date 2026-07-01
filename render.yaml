@@ -54,6 +54,15 @@ services:
         sync: false
       - key: SP_SITE
         value: justconstrutora.sharepoint.com:/sites/PlataformaJust
+      # E-mail transversal (M365 via Graph sendMail). Reusa a credencial SP_* acima.
+      # Requer no M365: caixa compartilhada EMAIL_FROM + Mail.Send (App) + Application Access Policy.
+      - key: EMAIL_DRIVER
+        value: graph
+      - key: EMAIL_FROM
+        value: naoresponda@construtorajust.com.br
+      # EMAIL_REPLY_TO opcional (responder-para padrão) — descomente e defina no dashboard se quiser.
+      # - key: EMAIL_REPLY_TO
+      #   sync: false
       # Triagem por IA (Gemini) — chave do Google AI Studio (AIza...). Ver server/triagem.ts.
       # LGPD: usar projeto/tier que NÃO treina com os dados (dado sensível de RH).
       - key: GEMINI_API_KEY
