@@ -143,6 +143,23 @@ export function registerFormularios(app: Express, perm: Perm) {
     }
   });
 
+  // ---- Gate em lote: status de bloqueio de todas as tarefas de uma obra (1 chamada) ----
+  app.get("/api/formularios/gate/lote", ler, async (req, res) => {
+    try {
+      const obraId = req.query.obra_id ? String(req.query.obra_id) : null;
+      if (!obraId) return res.status(400).json({ error: "obra_id é obrigatório." });
+      const tarefas = await db.tarefa.findMany({ where: { obra_id: obraId }, select: { id: true } });
+      const bloqueios: Record<string, string> = {};
+      for (const t of tarefas) {
+        const motivo = await verificarGateFvs(t.id);
+        if (motivo) bloqueios[t.id] = motivo;
+      }
+      res.json(bloqueios); // { tarefa_id: motivo } — só as bloqueadas
+    } catch (e) {
+      res.status(500).json({ error: String((e as Error).message) });
+    }
+  });
+
   // ---- Modelos (templates) ----
   app.get("/api/formularios", ler, async (req, res) => {
     try {
@@ -388,6 +405,16 @@ export function registerQualidade(app: Express, perm: Perm) {
       if (req.query.instancia_id) where.instancia_id = String(req.query.instancia_id);
       if (req.query.status) where.status = String(req.query.status);
       if (req.query.status_nao) where.status = { not: String(req.query.status_nao) };
+      if (req.query.severidade) where.severidade = String(req.query.severidade);
+      // Filtro por obra: NC não tem obra_id; resolve pelas instâncias da obra (entidade_label "obra:<id>:…").
+      if (req.query.obra_id) {
+        const obraId = String(req.query.obra_id);
+        const insts = await db.formularioInstancia.findMany({
+          where: { entidade_label: { startsWith: `obra:${obraId}` } },
+          select: { id: true },
+        });
+        where.instancia_id = { in: insts.map((i: any) => i.id) };
+      }
       res.json(await db.naoConformidade.findMany({ where, orderBy: { aberta_em: "desc" } }));
     } catch (e) {
       res.status(500).json({ error: String((e as Error).message) });

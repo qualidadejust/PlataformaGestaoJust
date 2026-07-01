@@ -212,6 +212,7 @@ export default function PendenciasView() {
     queryKey: ["nao-conformidades", obraId, filtroStatus, filtroSev],
     queryFn: () => {
       const params = new URLSearchParams();
+      if (obraId) params.set("obra_id", obraId);
       if (filtroStatus) params.set("status", filtroStatus);
       if (filtroSev) params.set("severidade", filtroSev);
       return api(`/nao-conformidades?${params}`);

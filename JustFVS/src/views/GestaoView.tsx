@@ -19,11 +19,11 @@ interface TarefaComStatus extends Tarefa {
 }
 
 function derivarStatus(
-  tarefa: Tarefa,
   instancias: FormularioInstancia[],
-  instanciasPorTarefa: Map<string, FormularioInstancia[]>,
+  bloqueada: boolean,
 ): QualidadeStatus {
-  if (instancias.length === 0) return "a_abrir";
+  // Bloqueio (predecessor não aprovado) só vale enquanto não há FVS própria em andamento/concluída.
+  if (instancias.length === 0) return bloqueada ? "bloqueada" : "a_abrir";
   const concluidas = instancias.filter((i) => !!i.preenchido_em);
   if (concluidas.length === 0) return "rascunho";
   const comNc = concluidas.filter((i) => i.total_nc > 0);
@@ -106,8 +106,8 @@ type ZonaMap = Map<string, Map<string, TarefaComStatus[]>>;
 function agrupar(tarefas: TarefaComStatus[]): ZonaMap {
   const m = new Map<string, Map<string, TarefaComStatus[]>>();
   for (const t of tarefas) {
-    const zona = t.local.zona;
-    const pav = t.local.pavimento;
+    const zona = t.local?.zona ?? "Sem zona";
+    const pav = t.local?.pavimento ?? "Sem pavimento";
     if (!m.has(zona)) m.set(zona, new Map());
     const pm = m.get(zona)!;
     if (!pm.has(pav)) pm.set(pav, []);
@@ -139,6 +139,14 @@ export default function GestaoView({ onAbrirFvs }: Props) {
     select: (todas) => todas.filter((i) => i.entidade_label?.startsWith(`obra:${obraId}`)),
   });
 
+  // Gate em lote: mapa tarefa_id → motivo (só as bloqueadas). Uma chamada por obra.
+  const { data: bloqueios } = useQuery<Record<string, string>>({
+    queryKey: ["fvs-gate-lote", obraId],
+    queryFn: () => api(`/formularios/gate/lote?obra_id=${obraId}`),
+    enabled: !!obraId,
+    staleTime: 60 * 1000,
+  });
+
   // Monta mapa tarefa_id → instâncias
   const instPorTarefa = useMemo<Map<string, FormularioInstancia[]>>(() => {
     const m = new Map<string, FormularioInstancia[]>();
@@ -155,9 +163,10 @@ export default function GestaoView({ onAbrirFvs }: Props) {
     if (!tarefas) return [];
     return tarefas.map((t) => {
       const inst = instPorTarefa.get(t.id) ?? [];
-      return { ...t, instancias: inst, status_qualidade: derivarStatus(t, inst, instPorTarefa) };
+      const bloqueada = !!bloqueios?.[t.id];
+      return { ...t, instancias: inst, status_qualidade: derivarStatus(inst, bloqueada) };
     });
-  }, [tarefas, instPorTarefa]);
+  }, [tarefas, instPorTarefa, bloqueios]);
 
   // Filtros
   const tarefasFiltradas = useMemo(() => {

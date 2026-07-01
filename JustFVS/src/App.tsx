@@ -14,6 +14,7 @@ export interface NavState {
   tab: Tab;
   tarefaId?: string;
   tarefaLabel?: string;
+  origem?: Tab; // aba de onde a FVS foi aberta (p/ voltar corretamente)
 }
 
 export default function App() {
@@ -27,10 +28,11 @@ export default function App() {
     { id: "pendencias" as Tab, label: "Pendências", icon: AlertTriangle   },
   ];
 
+  // Preserva a aba de origem (Gestão ou Cronograma) para retornar a ela ao concluir/cancelar.
   const irParaNovaFvs = (tarefaId: string, tarefaLabel: string) =>
-    setNav({ tab: "cronograma", tarefaId, tarefaLabel });
+    setNav((prev) => ({ tab: prev.tab, tarefaId, tarefaLabel, origem: prev.tab }));
 
-  const voltarParaCronograma = () => setNav({ tab: "cronograma" });
+  const voltarParaOrigem = () => setNav({ tab: nav.origem ?? "gestao" });
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-100">
@@ -76,8 +78,8 @@ export default function App() {
           <NovoFvsView
             tarefaId={nav.tarefaId}
             tarefaLabel={nav.tarefaLabel ?? ""}
-            onConcluir={voltarParaCronograma}
-            onCancelar={voltarParaCronograma}
+            onConcluir={voltarParaOrigem}
+            onCancelar={voltarParaOrigem}
           />
         ) : nav.tab === "gestao" ? (
           <GestaoView onAbrirFvs={irParaNovaFvs} />
