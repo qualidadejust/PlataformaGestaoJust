@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ClipboardCheck, CalendarDays, ListChecks, LogOut, LayoutDashboard, AlertTriangle } from "lucide-react";
+import { ClipboardCheck, CalendarDays, ListChecks, LogOut, LayoutDashboard, AlertTriangle, Grid3x3, PieChart } from "lucide-react";
 import { cn } from "./lib/cn.ts";
 import { useAuth } from "./auth.tsx";
 import CronogramaView from "./views/CronogramaView.tsx";
@@ -7,8 +7,10 @@ import FvsListaView from "./views/FvsListaView.tsx";
 import NovoFvsView from "./views/NovoFvsView.tsx";
 import GestaoView from "./views/GestaoView.tsx";
 import PendenciasView from "./views/PendenciasView.tsx";
+import CoberturaView from "./views/CoberturaView.tsx";
+import DashboardView from "./views/DashboardView.tsx";
 
-export type Tab = "gestao" | "cronograma" | "lista" | "pendencias";
+export type Tab = "dashboard" | "gestao" | "cobertura" | "cronograma" | "lista" | "pendencias";
 
 export interface NavState {
   tab: Tab;
@@ -19,10 +21,12 @@ export interface NavState {
 
 export default function App() {
   const { user, logout } = useAuth();
-  const [nav, setNav] = useState<NavState>({ tab: "gestao" });
+  const [nav, setNav] = useState<NavState>({ tab: "dashboard" });
 
   const tabs = [
+    { id: "dashboard" as Tab,  label: "Dashboard",  icon: PieChart        },
     { id: "gestao" as Tab,     label: "Gestão",     icon: LayoutDashboard },
+    { id: "cobertura" as Tab,  label: "Cobertura",  icon: Grid3x3         },
     { id: "cronograma" as Tab, label: "Cronograma", icon: CalendarDays    },
     { id: "lista" as Tab,      label: "Fichas FVS", icon: ListChecks      },
     { id: "pendencias" as Tab, label: "Pendências", icon: AlertTriangle   },
@@ -81,8 +85,12 @@ export default function App() {
             onConcluir={voltarParaOrigem}
             onCancelar={voltarParaOrigem}
           />
+        ) : nav.tab === "dashboard" ? (
+          <DashboardView onAbrirFvs={irParaNovaFvs} />
         ) : nav.tab === "gestao" ? (
           <GestaoView onAbrirFvs={irParaNovaFvs} />
+        ) : nav.tab === "cobertura" ? (
+          <CoberturaView />
         ) : nav.tab === "cronograma" ? (
           <CronogramaView onNovaFvs={irParaNovaFvs} />
         ) : nav.tab === "pendencias" ? (

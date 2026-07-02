@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, AlertTriangle, ClipboardPlus, Loader2 } from "lucide-react";
+import { ChevronDown, ChevronRight, AlertTriangle, ClipboardPlus, Loader2, Lock } from "lucide-react";
 import { api } from "../lib/api.ts";
 import { cn } from "../lib/cn.ts";
 import type { Obra, Tarefa } from "../lib/types.ts";
@@ -44,8 +44,9 @@ function agrupar(tarefas: Tarefa[]): ZonaMap {
   return m;
 }
 
-function TarefaRow({ t, onNovaFvs }: { t: Tarefa; onNovaFvs: Props["onNovaFvs"] }) {
+function TarefaRow({ t, onNovaFvs, motivoBloqueio }: { t: Tarefa; onNovaFvs: Props["onNovaFvs"]; motivoBloqueio?: string }) {
   const label = `${t.servico.sigla_prancha}${t.job ? " – " + t.job : ""} · ${t.local.zona} / ${t.local.pavimento}`;
+  const bloqueada = !!motivoBloqueio;
   return (
     <div className="flex items-center gap-3 rounded-lg border border-slate-100 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-900">
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -63,14 +64,24 @@ function TarefaRow({ t, onNovaFvs }: { t: Tarefa; onNovaFvs: Props["onNovaFvs"] 
         </div>
       </div>
       <BarraAvanco pct={t.avanco_pct} />
-      <button
-        onClick={() => onNovaFvs(t.id, label)}
-        title="Nova FVS para esta tarefa"
-        className="flex shrink-0 items-center gap-1.5 rounded-lg bg-teal-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-teal-700 dark:bg-teal-500 dark:hover:bg-teal-600"
-      >
-        <ClipboardPlus className="size-3.5" />
-        FVS
-      </button>
+      {bloqueada ? (
+        <span
+          title={motivoBloqueio}
+          className="flex shrink-0 items-center gap-1.5 rounded-lg bg-purple-50 px-2.5 py-1.5 text-xs font-medium text-purple-600 dark:bg-purple-950/40 dark:text-purple-300"
+        >
+          <Lock className="size-3.5" />
+          Bloqueada
+        </span>
+      ) : (
+        <button
+          onClick={() => onNovaFvs(t.id, label)}
+          title="Nova FVS para esta tarefa"
+          className="flex shrink-0 items-center gap-1.5 rounded-lg bg-teal-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-teal-700 dark:bg-teal-500 dark:hover:bg-teal-600"
+        >
+          <ClipboardPlus className="size-3.5" />
+          FVS
+        </button>
+      )}
     </div>
   );
 }
@@ -84,6 +95,14 @@ export default function CronogramaView({ onNovaFvs }: Props) {
     queryKey: ["tarefas", obraId],
     queryFn: () => api(`/tarefas?obra_id=${obraId}`),
     enabled: !!obraId,
+  });
+
+  // Gate em lote: tarefas bloqueadas por predecessora sem FVS aprovada (mesma fonte da Gestão).
+  const { data: bloqueios } = useQuery<Record<string, string>>({
+    queryKey: ["fvs-gate-lote", obraId],
+    queryFn: () => api(`/formularios/gate/lote?obra_id=${obraId}`),
+    enabled: !!obraId,
+    staleTime: 60 * 1000,
   });
 
   const grupos: ZonaMap = useMemo(() => (tarefas ? agrupar(tarefas) : new Map()), [tarefas]);
@@ -167,7 +186,7 @@ export default function CronogramaView({ onNovaFvs }: Props) {
                       {pavAberto && (
                         <div className="mt-1 ml-4 space-y-1.5">
                           {tarefasLocal.map((t) => (
-                            <TarefaRow key={t.id} t={t} onNovaFvs={onNovaFvs} />
+                            <TarefaRow key={t.id} t={t} onNovaFvs={onNovaFvs} motivoBloqueio={bloqueios?.[t.id]} />
                           ))}
                         </div>
                       )}

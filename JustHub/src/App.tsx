@@ -8,6 +8,7 @@ import {
   Truck,
   MessageCircle,
   Stethoscope,
+  ClipboardCheck,
   ArrowUpRight,
   LogOut,
   type LucideIcon,
@@ -26,6 +27,7 @@ const ICONS: Record<string, LucideIcon> = {
   Truck,
   MessageCircle,
   Stethoscope,
+  ClipboardCheck,
 };
 
 // Indicador de status: pinga o /api/health (CORS habilitado) com timeout curto.

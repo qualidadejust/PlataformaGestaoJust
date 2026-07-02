@@ -96,12 +96,18 @@ export interface SecaoEstrutural {
   itens: ItemResposta[];
 }
 
+export interface RespostaFoto {
+  documento_id: string; // id do documento no GED (Core)
+  nome: string;
+}
+
 export interface RespostaItem {
   secao: string;
   item: number;
   tipo: string;
   valor: string | null; // "sim" | "nao" | "na" | texto | number
   obs?: string;
+  fotos?: RespostaFoto[]; // evidência fotográfica (ponteiros para o GED)
 }
 
 export interface FormularioInstancia {

@@ -89,6 +89,15 @@ export const MODULOS: Modulo[] = [
     tag: "Documentos",
   },
   {
+    key: "fvs",
+    nome: "JustFVS",
+    descricao: "Qualidade (FVS): cobertura serviço×local, gate sequencial, NC com evidência e dashboards.",
+    icon: "ClipboardCheck",
+    cor: "text-teal-600",
+    url: frontUrl("fvs", "http://localhost:4900"),
+    tag: "Qualidade",
+  },
+  {
     key: "atestados",
     nome: "JustAtestados",
     descricao: "Atestados e declarações: lançamento, fila de análise do RH e KPIs de absenteísmo.",

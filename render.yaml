@@ -212,6 +212,22 @@ services:
         source: /*
         destination: /index.html
 
+  # JustFVS — Fichas de Verificação de Serviço (front-only, consome o Core via /core).
+  - type: web
+    runtime: static
+    name: just-fvs-web
+    buildCommand: npm --prefix JustFVS install --include=dev && npm --prefix JustFVS run build
+    staticPublishPath: JustFVS/dist
+    envVars:
+      - key: VITE_GATEWAY
+        fromService: { name: just-gateway, type: web, property: host }
+      - key: VITE_API_PREFIX
+        value: /core
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+
   # Portal (Hub): linka os outros fronts (VITE_URL_*) e mostra status (VITE_GATEWAY).
   - type: web
     runtime: static
@@ -235,6 +251,8 @@ services:
         fromService: { name: just-atestados-web, type: web, property: host }
       - key: VITE_URL_DOCS
         fromService: { name: just-docs-web, type: web, property: host }
+      - key: VITE_URL_FVS
+        fromService: { name: just-fvs-web, type: web, property: host }
     routes:
       - type: rewrite
         source: /*

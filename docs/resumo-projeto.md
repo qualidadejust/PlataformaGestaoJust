@@ -566,9 +566,19 @@ routes.ts                    — rotas Express registradas em registerIntegratio
 App de **gestão de qualidade de obra** (PBQP-H). **Front-only** — sem back/DB próprio; consome
 o **Core (4100)**: motor de formulários, backbone Local/Serviço/Tarefa, GED e auth.
 
+**Tela Dashboard** (`DashboardView`): indicadores de qualidade por obra — KPIs (conformidade na
+1ª verificação, aguardando inspeção, NCs abertas, serviços bloqueados), donut de status das FVS
+(SVG puro, sem dependência), barras de NC por serviço e lista "prontos para inspeção" com atalho
+para abrir FVS. Reusa `lib/qualidade.ts` (derivação de status + paleta).
+
+**Tela Cobertura** (`CoberturaView`): matriz **serviço × local** — linhas = serviços, colunas =
+locais (agrupados por zona), célula colorida pelo status da FVS daquela combinação; célula em
+branco = combinação não prevista no cronograma. Mostra % de cobertura conforme e destaca serviços
+**sem modelo FVS publicado**. É a visão para achar "buracos" de verificação numa auditoria.
+
 **Tela Cronograma** (`CronogramaView`): árvore Obra→Zona→Pavimento→Tarefa (dados do backbone),
 com botão "FVS" por tarefa. Avanço físico do Prevision visível (barra + %). Tarefas bloqueadas
-pelo gate sequencial exibem cadeado e motivo.
+pelo gate sequencial exibem **cadeado "Bloqueada"** e motivo (via `/formularios/gate/lote`).
 
 **Tela Fichas FVS** (`FvsListaView`): listagem de todas as `FormularioInstancia` com
 `escopo=fvs` por obra — status (rascunho / conforme / com NC), autor, data.
@@ -585,8 +595,11 @@ nova FVS de reverificação. NC fechada desbloqueia o próximo serviço encadead
 
 **Preenchimento FVS** (`NovoFvsView`): carrega o `FormularioModelo` publicado cujo
 `servico_sigla` bate com a `Tarefa.servico.sigla_prancha`. Itens conforme/não-conforme/NA com
-observação e foto (→GED). Salvar rascunho ou concluir (exige todos respondidos). Ao concluir,
-cada item NC com `gera_nc.ativo` cria uma `NaoConformidade` no Core automaticamente.
+observação e **evidência fotográfica por item** — a foto sobe ao **GED** (`POST /api/documentos`,
+`entidade_tipo=tarefa`, `categoria=evidencia_fvs`) e o ponteiro (`{documento_id, nome}`) fica em
+`respostas[].fotos`; thumbnail e remoção na hora. Quando o item define `foto.obrigatoria_se_nc`,
+a conclusão fica **travada** até anexar a foto da NC. Salvar rascunho ou concluir (exige todos
+respondidos). Ao concluir, cada item NC com `gera_nc.ativo` cria uma `NaoConformidade` no Core.
 
 **Gate sequencial** (Core-side): ao criar `FormularioInstancia` com `escopo=fvs`, o Core valida
 se a tarefa predecessora (de `Tarefa.predecessores` ou de `SequenciaQualidade` de override) tem

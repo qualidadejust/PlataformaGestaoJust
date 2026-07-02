@@ -1,12 +1,13 @@
-import { useState, useEffect } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState, useEffect, useRef } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ChevronLeft, Loader2, ClipboardCheck, CheckCircle, XCircle, Minus, AlertTriangle,
+  Camera, X,
 } from "lucide-react";
 import { api } from "../lib/api.ts";
 import { cn } from "../lib/cn.ts";
 import { useAuth } from "../auth.tsx";
-import type { FormularioModelo, SecaoEstrutural, ItemResposta, RespostaItem, Tarefa } from "../lib/types.ts";
+import type { FormularioModelo, SecaoEstrutural, ItemResposta, RespostaItem, RespostaFoto, Tarefa } from "../lib/types.ts";
 
 interface Props {
   tarefaId: string;
@@ -17,9 +18,15 @@ interface Props {
 
 type ValorResposta = "sim" | "nao" | "na" | null;
 
+interface FotoLocal extends RespostaFoto {
+  previewUrl?: string; // object URL local (só em memória, não serializado)
+}
+
 interface RespostaLocal {
   valor: ValorResposta;
   obs: string;
+  fotos: FotoLocal[];
+  enviandoFoto?: boolean;
 }
 
 function BotaoResposta({
@@ -60,12 +67,20 @@ function ItemForm({
   item,
   resposta,
   onChange,
+  onAddFoto,
+  onRemoveFoto,
 }: {
   item: ItemResposta;
   resposta: RespostaLocal;
   onChange: (r: RespostaLocal) => void;
+  onAddFoto: (file: File) => void;
+  onRemoveFoto: (idx: number) => void;
 }) {
   const temNc = resposta.valor === "nao";
+  const inputRef = useRef<HTMLInputElement>(null);
+  const permiteFoto = item.foto?.permite !== false; // default: permite foto em todo item
+  const fotoObrigatoria = !!item.foto?.obrigatoria_se_nc && temNc && resposta.fotos.length === 0;
+
   return (
     <div className={cn("rounded-lg border p-3", temNc && "border-red-200 bg-red-50/40 dark:border-red-900 dark:bg-red-950/20")}>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-4">
@@ -93,6 +108,7 @@ function ItemForm({
           )}
         </div>
       </div>
+
       {temNc && (
         <div className="mt-2">
           <label className="text-xs font-medium text-red-700 dark:text-red-400">
@@ -106,6 +122,60 @@ function ItemForm({
             className="mt-1 w-full rounded-lg border border-red-200 bg-white px-3 py-1.5 text-sm text-slate-800 focus:border-red-400 focus:outline-none dark:border-red-900 dark:bg-slate-900 dark:text-slate-100"
             placeholder="Descreva o problema encontrado…"
           />
+        </div>
+      )}
+
+      {/* Evidência fotográfica */}
+      {permiteFoto && (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          {resposta.fotos.map((f, idx) => (
+            <div key={idx} className="group relative size-14 overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700">
+              {f.previewUrl ? (
+                <img src={f.previewUrl} alt={f.nome} className="size-full object-cover" />
+              ) : (
+                <div className="flex size-full items-center justify-center bg-slate-100 dark:bg-slate-800"><Camera className="size-5 text-slate-400" /></div>
+              )}
+              <button
+                type="button"
+                onClick={() => onRemoveFoto(idx)}
+                title="Remover foto"
+                className="absolute right-0.5 top-0.5 rounded-full bg-black/60 p-0.5 text-white opacity-0 transition group-hover:opacity-100"
+              >
+                <X className="size-3" />
+              </button>
+            </div>
+          ))}
+
+          <input
+            ref={inputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) onAddFoto(file);
+              e.target.value = "";
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            disabled={resposta.enviandoFoto}
+            className={cn(
+              "flex size-14 flex-col items-center justify-center gap-0.5 rounded-lg border border-dashed text-[10px] transition disabled:opacity-60",
+              fotoObrigatoria
+                ? "border-red-400 bg-red-50 text-red-600 dark:border-red-700 dark:bg-red-950/30 dark:text-red-300"
+                : "border-slate-300 text-slate-400 hover:border-teal-400 hover:text-teal-600 dark:border-slate-600",
+            )}
+          >
+            {resposta.enviandoFoto ? <Loader2 className="size-4 animate-spin" /> : <Camera className="size-4" />}
+            {resposta.enviandoFoto ? "Enviando" : "Foto"}
+          </button>
+
+          {fotoObrigatoria && (
+            <span className="text-xs text-red-600 dark:text-red-400">Foto obrigatória para esta NC.</span>
+          )}
         </div>
       )}
     </div>
@@ -144,30 +214,86 @@ export default function NovoFvsView({ tarefaId, tarefaLabel, onConcluir, onCance
       const m = new Map<string, RespostaLocal>();
       for (const s of secoes) {
         for (const it of s.itens) {
-          m.set(`${s.ordem}:${it.ordem}`, { valor: null, obs: "" });
+          m.set(`${s.ordem}:${it.ordem}`, { valor: null, obs: "", fotos: [] });
         }
       }
       setRespostas(m);
     }
   }, [modelo?.id]);
 
+  // Índice item→config (para saber se a foto é obrigatória por item)
+  function itemDaChave(key: string): ItemResposta | undefined {
+    const [secOrdem, itOrdem] = key.split(":").map(Number);
+    return secoes.find((s) => s.ordem === secOrdem)?.itens.find((it) => it.ordem === itOrdem);
+  }
+
+  // Upload de foto ao GED (Core), amarrada à tarefa. Retorna o ponteiro salvo na resposta.
+  async function enviarFotoGed(file: File): Promise<RespostaFoto> {
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("entidade_tipo", "tarefa");
+    fd.append("entidade_id", tarefaId);
+    fd.append("entidade_label", tarefaLabel);
+    fd.append("categoria", "evidencia_fvs");
+    fd.append("origem", "upload");
+    if (user) fd.append("uploaded_by", user.colaborador?.nome ?? user.email);
+    const doc = await api<{ id: string; nome_original: string }>("/documentos", { method: "POST", body: fd });
+    return { documento_id: doc.id, nome: doc.nome_original };
+  }
+
+  async function addFoto(key: string, file: File) {
+    setRespostas((prev) => new Map(prev).set(key, { ...(prev.get(key) ?? { valor: null, obs: "", fotos: [] }), enviandoFoto: true }));
+    const previewUrl = URL.createObjectURL(file);
+    try {
+      const ref = await enviarFotoGed(file);
+      setRespostas((prev) => {
+        const atual = prev.get(key) ?? { valor: null, obs: "", fotos: [] };
+        return new Map(prev).set(key, { ...atual, enviandoFoto: false, fotos: [...atual.fotos, { ...ref, previewUrl }] });
+      });
+    } catch (e) {
+      URL.revokeObjectURL(previewUrl);
+      setRespostas((prev) => new Map(prev).set(key, { ...(prev.get(key) ?? { valor: null, obs: "", fotos: [] }), enviandoFoto: false }));
+      setErro(`Falha ao enviar foto: ${(e as Error).message}`);
+    }
+  }
+
+  function removeFoto(key: string, idx: number) {
+    setRespostas((prev) => {
+      const atual = prev.get(key);
+      if (!atual) return prev;
+      const f = atual.fotos[idx];
+      if (f?.previewUrl) URL.revokeObjectURL(f.previewUrl);
+      return new Map(prev).set(key, { ...atual, fotos: atual.fotos.filter((_, i) => i !== idx) });
+    });
+  }
+
   const totalItens = secoes.reduce((s, sec) => s + sec.itens.length, 0);
   const respondidos = [...respostas.values()].filter((r) => r.valor !== null).length;
   const totalNc = [...respostas.values()].filter((r) => r.valor === "nao").length;
-  const completo = respondidos === totalItens && totalItens > 0;
+  const enviandoAlgumaFoto = [...respostas.values()].some((r) => r.enviandoFoto);
+
+  // NCs que exigem foto (item.foto.obrigatoria_se_nc) mas ainda estão sem foto → travam a conclusão.
+  const fotosNcFaltando = [...respostas.entries()].filter(([key, r]) => {
+    if (r.valor !== "nao") return false;
+    const it = itemDaChave(key);
+    return !!it?.foto?.obrigatoria_se_nc && r.fotos.length === 0;
+  }).length;
+
+  const completo = respondidos === totalItens && totalItens > 0 && fotosNcFaltando === 0 && !enviandoAlgumaFoto;
 
   function buildRespostasJson(): RespostaItem[] {
     const arr: RespostaItem[] = [];
     for (const s of secoes) {
       for (const it of s.itens) {
         const key = `${s.ordem}:${it.ordem}`;
-        const r = respostas.get(key) ?? { valor: null, obs: "" };
+        const r = respostas.get(key) ?? { valor: null, obs: "", fotos: [] };
         arr.push({
           secao: s.secao,
           item: it.ordem,
           tipo: it.resposta.tipo,
           valor: r.valor,
           obs: r.obs || undefined,
+          fotos: r.fotos.length ? r.fotos.map((f) => ({ documento_id: f.documento_id, nome: f.nome })) : undefined,
         });
       }
     }
@@ -275,8 +401,10 @@ export default function NovoFvsView({ tarefaId, tarefaLabel, onConcluir, onCance
                 <ItemForm
                   key={it.ordem}
                   item={it}
-                  resposta={respostas.get(key) ?? { valor: null, obs: "" }}
+                  resposta={respostas.get(key) ?? { valor: null, obs: "", fotos: [] }}
                   onChange={(r) => setRespostas((prev) => new Map(prev).set(key, r))}
+                  onAddFoto={(file) => addFoto(key, file)}
+                  onRemoveFoto={(idx) => removeFoto(key, idx)}
                 />
               );
             })}
@@ -307,7 +435,12 @@ export default function NovoFvsView({ tarefaId, tarefaLabel, onConcluir, onCance
           <button
             onClick={() => salvar(true)}
             disabled={salvando || !completo}
-            title={!completo ? "Responda todos os itens antes de concluir" : undefined}
+            title={
+              enviandoAlgumaFoto ? "Aguarde o envio das fotos"
+              : fotosNcFaltando > 0 ? "Anexe a foto obrigatória das não-conformidades"
+              : !completo ? "Responda todos os itens antes de concluir"
+              : undefined
+            }
             className="rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-60 dark:bg-teal-500 dark:hover:bg-teal-600"
           >
             {salvando ? <Loader2 className="inline size-4 animate-spin" /> : "Concluir FVS"}
