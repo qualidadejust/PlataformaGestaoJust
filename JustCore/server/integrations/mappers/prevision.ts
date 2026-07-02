@@ -1,4 +1,5 @@
 import type { PrevisionRow } from "../previsionClient.ts";
+import { fixMojibake } from "../../lib/fix-mojibake.ts";
 
 export interface MappedLocal {
   obra_id: string;
@@ -76,10 +77,10 @@ export function mapPrevisionRows(
     // Ignora linhas sem ID
     if (!row.id || row.id === "-") continue;
 
-    const zona = row.replication_group?.trim() || "SEM ZONA";
-    const pavimento = row.floor?.trim() || "SEM PAVIMENTO";
-    const sigla = extractSigla(row.service || "");
-    const nomeServico = extractNomeServico(row.service || "");
+    const zona = fixMojibake(row.replication_group?.trim() || "SEM ZONA");
+    const pavimento = fixMojibake(row.floor?.trim() || "SEM PAVIMENTO");
+    const sigla = fixMojibake(extractSigla(row.service || ""));
+    const nomeServico = fixMojibake(extractNomeServico(row.service || ""));
 
     // Local único por obra+zona+pavimento
     const localKey = `${zona}||${pavimento}`;
@@ -115,7 +116,7 @@ export function mapPrevisionRows(
       pavimento,
       sigla_prancha: sigla,
       external_id,
-      job: row.job && row.job !== "-" ? row.job.trim() : null,
+      job: row.job && row.job !== "-" ? fixMojibake(row.job.trim()) : null,
       baseline_inicio: parseDate(row.baseline_step_start),
       baseline_fim: parseDate(row.baseline_step_end),
       real_inicio: parseDate(row.real_date_start_at),
@@ -124,7 +125,7 @@ export function mapPrevisionRows(
       critico: row.critical_path?.toLowerCase() === "crítica" || row.critical_path?.toLowerCase() === "critica",
       predecessores: row.predecessors && row.predecessors !== "-" ? row.predecessors.trim() : null,
       successores: row.successors && row.successors !== "-" ? row.successors.trim() : null,
-      material_resources: row.material_resources && row.material_resources !== "-" ? row.material_resources.trim() : null,
+      material_resources: row.material_resources && row.material_resources !== "-" ? fixMojibake(row.material_resources.trim()) : null,
       origem: "PREVISION",
     });
   }

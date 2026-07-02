@@ -16,6 +16,7 @@
     "db:seed-acesso": "tsx prisma/seed-acesso.ts",
     "db:seed-formularios": "tsx prisma/seed-formularios.ts",
     "db:seed-fvs-for": "tsx prisma/seed-fvs-for.ts",
+    "db:fix-mojibake": "tsx prisma/fix-mojibake-prevision.ts",
     "db:studio": "prisma studio"
   },
   "dependencies": {
